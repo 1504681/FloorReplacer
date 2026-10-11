@@ -20,7 +20,7 @@ public interface FloorReplacerConfig extends Config
 	)
 	default Color color()
 	{
-		return new Color(0x59, 0xBD, 0xAC);
+		return new Color(0x64, 0x87, 0x8D);
 	}
 
 	@ConfigItem(
@@ -57,7 +57,7 @@ public interface FloorReplacerConfig extends Config
 	)
 	default int maxBrightness()
 	{
-		return 80;
+		return 50;
 	}
 
 	@ConfigItem(
