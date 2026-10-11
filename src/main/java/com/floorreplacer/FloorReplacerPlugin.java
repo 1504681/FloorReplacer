@@ -65,6 +65,10 @@ public class FloorReplacerPlugin extends Plugin
 	private final Map<Object, int[]> originals = new IdentityHashMap<>();
 	private final Set<Scene> paintedScenes = Collections.newSetFromMap(new IdentityHashMap<>());
 
+	// Luminance clamp (0..127) applied when shading is kept; set from config at the start of each paint pass
+	private int minLum = 0;
+	private int maxLum = JagexColor.LUMINANCE_MAX;
+
 	@Provides
 	FloorReplacerConfig provideConfig(ConfigManager configManager)
 	{
@@ -153,6 +157,12 @@ public class FloorReplacerPlugin extends Plugin
 		int target = JagexColor.rgbToHSL(config.color().getRGB() & 0xFFFFFF, brightness) & 0xFFFF;
 		boolean shade = config.keepShading();
 		boolean objects = config.floorObjects();
+		minLum = JagexColor.LUMINANCE_MAX * Math.max(0, Math.min(100, config.minBrightness())) / 100;
+		maxLum = JagexColor.LUMINANCE_MAX * Math.max(0, Math.min(100, config.maxBrightness())) / 100;
+		if (maxLum < minLum)
+		{
+			maxLum = minLum;
+		}
 		int reference = shade ? averageLuminance(tiles) : 0;
 
 		int painted = 0;
@@ -336,9 +346,10 @@ public class FloorReplacerPlugin extends Plugin
 
 	/**
 	 * Replace one packed HSL vertex colour with the target. With shading on, the vertex keeps its brightness
-	 * offset from the scene's average floor brightness, so the lit and shadowed sides of hills still differ.
+	 * offset from the scene's average floor brightness, so the lit and shadowed sides of hills still differ,
+	 * clamped to the configured min/max brightness so no area gets washed out or too dark.
 	 */
-	private static int recolor(int original, int target, boolean shade, int reference)
+	private int recolor(int original, int target, boolean shade, int reference)
 	{
 		if (original == HIDDEN || original < 0)
 		{
@@ -349,7 +360,7 @@ public class FloorReplacerPlugin extends Plugin
 			return target;
 		}
 		int lum = JagexColor.unpackLuminance((short) target) + (JagexColor.unpackLuminance((short) original) - reference);
-		lum = Math.max(0, Math.min(JagexColor.LUMINANCE_MAX, lum));
+		lum = Math.max(minLum, Math.min(maxLum, lum));
 		return JagexColor.packHSL(
 			JagexColor.unpackHue((short) target),
 			JagexColor.unpackSaturation((short) target),

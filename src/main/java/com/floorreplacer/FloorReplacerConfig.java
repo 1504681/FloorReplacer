@@ -4,6 +4,8 @@ import java.awt.Color;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.Range;
+import net.runelite.client.config.Units;
 
 @ConfigGroup(FloorReplacerConfig.GROUP)
 public interface FloorReplacerConfig extends Config
@@ -32,11 +34,37 @@ public interface FloorReplacerConfig extends Config
 		return true;
 	}
 
+	@Range(min = 0, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(
+		keyName = "minBrightness",
+		name = "Min brightness",
+		description = "With Keep shading on, no tile is drawn darker than this. 0 means no limit.",
+		position = 2
+	)
+	default int minBrightness()
+	{
+		return 0;
+	}
+
+	@Range(min = 0, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(
+		keyName = "maxBrightness",
+		name = "Max brightness",
+		description = "With Keep shading on, no tile is drawn brighter than this. 100 means no limit.",
+		position = 3
+	)
+	default int maxBrightness()
+	{
+		return 100;
+	}
+
 	@ConfigItem(
 		keyName = "floorObjects",
 		name = "Flat floor objects",
 		description = "Also recolour flat models lying on the ground: mosaics, paving, rugs, trapdoors, puddles. Anything with height is left alone.",
-		position = 2
+		position = 4
 	)
 	default boolean floorObjects()
 	{
