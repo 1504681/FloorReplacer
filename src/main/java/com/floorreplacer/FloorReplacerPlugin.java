@@ -11,8 +11,12 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Constants;
+import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
+import net.runelite.api.GroundObject;
 import net.runelite.api.JagexColor;
+import net.runelite.api.Model;
+import net.runelite.api.Renderable;
 import net.runelite.api.Scene;
 import net.runelite.api.SceneTileModel;
 import net.runelite.api.SceneTilePaint;
@@ -44,6 +48,8 @@ public class FloorReplacerPlugin extends Plugin
 	private static final int ZONE_SIZE = 8;
 	private static final int ZONES = Constants.EXTENDED_SCENE_SIZE / ZONE_SIZE;
 	private static final double DEFAULT_BRIGHTNESS = 0.8;
+	// Objects no taller than this (in model units; a tile is 128 wide) count as floor: mosaics, rugs, paving, puddles
+	private static final int FLAT_OBJECT_HEIGHT = 24;
 
 	@Inject
 	private Client client;
@@ -146,6 +152,7 @@ public class FloorReplacerPlugin extends Plugin
 		double brightness = textures != null ? textures.getBrightness() : DEFAULT_BRIGHTNESS;
 		int target = JagexColor.rgbToHSL(config.color().getRGB() & 0xFFFFFF, brightness) & 0xFFFF;
 		boolean shade = config.keepShading();
+		boolean objects = config.floorObjects();
 		int reference = shade ? averageLuminance(tiles) : 0;
 
 		int painted = 0;
@@ -159,11 +166,11 @@ public class FloorReplacerPlugin extends Plugin
 					{
 						continue;
 					}
-					painted += paintTile(tile, target, shade, reference);
+					painted += paintTile(tile, target, shade, reference, objects);
 					Tile bridge = tile.getBridge();
 					if (bridge != null)
 					{
-						painted += paintTile(bridge, target, shade, reference);
+						painted += paintTile(bridge, target, shade, reference, objects);
 					}
 				}
 			}
@@ -174,7 +181,7 @@ public class FloorReplacerPlugin extends Plugin
 		log.debug("Painted {} floor tiles in world view {}", painted, scene.getWorldViewId());
 	}
 
-	private int paintTile(Tile tile, int target, boolean shade, int reference)
+	private int paintTile(Tile tile, int target, boolean shade, int reference, boolean objects)
 	{
 		int painted = 0;
 		SceneTilePaint paint = tile.getSceneTilePaint();
@@ -189,7 +196,90 @@ public class FloorReplacerPlugin extends Plugin
 			paintModel(model, target, shade, reference);
 			painted++;
 		}
+		if (objects)
+		{
+			GroundObject ground = tile.getGroundObject();
+			if (ground != null)
+			{
+				painted += paintFlatObject(ground.getRenderable(), target, shade, reference);
+			}
+			GameObject[] gameObjects = tile.getGameObjects();
+			if (gameObjects != null)
+			{
+				for (GameObject gameObject : gameObjects)
+				{
+					if (gameObject != null)
+					{
+						painted += paintFlatObject(gameObject.getRenderable(), target, shade, reference);
+					}
+				}
+			}
+		}
 		return painted;
+	}
+
+	/**
+	 * Floors that are really models lying on the tile (mosaics, paving, rugs, trapdoors, puddles). Only static,
+	 * near-flat models qualify; animated objects, actors and anything with height are left alone.
+	 */
+	private int paintFlatObject(Renderable renderable, int target, boolean shade, int reference)
+	{
+		if (!(renderable instanceof Model))
+		{
+			return 0;
+		}
+		Model model = (Model) renderable;
+		int[] c1 = model.getFaceColors1();
+		int[] c2 = model.getFaceColors2();
+		int[] c3 = model.getFaceColors3();
+		float[] ys = model.getVerticesY();
+		if (c1 == null || c2 == null || c3 == null || ys == null)
+		{
+			return 0;
+		}
+		int n = model.getFaceCount();
+		int vertices = Math.min(model.getVerticesCount(), ys.length);
+		if (!originals.containsKey(model))
+		{
+			float min = Float.MAX_VALUE;
+			float max = -Float.MAX_VALUE;
+			for (int i = 0; i < vertices; i++)
+			{
+				min = Math.min(min, ys[i]);
+				max = Math.max(max, ys[i]);
+			}
+			if (vertices == 0 || max - min > FLAT_OBJECT_HEIGHT)
+			{
+				return 0;
+			}
+			short[] tex = model.getFaceTextures();
+			int[] copy = new int[tex != null ? 4 * n : 3 * n];
+			System.arraycopy(c1, 0, copy, 0, n);
+			System.arraycopy(c2, 0, copy, n, n);
+			System.arraycopy(c3, 0, copy, 2 * n, n);
+			if (tex != null)
+			{
+				for (int i = 0; i < n; i++)
+				{
+					copy[3 * n + i] = tex[i];
+				}
+			}
+			originals.put(model, copy);
+		}
+		int[] orig = originals.get(model);
+		short[] tex = model.getFaceTextures();
+		for (int i = 0; i < n; i++)
+		{
+			c1[i] = recolor(orig[i], target, shade, reference);
+			c2[i] = recolor(orig[n + i], target, shade, reference);
+			// colour3 of -1 means flat-shaded face, -2 means hidden face; both must survive
+			c3[i] = recolor(orig[2 * n + i], target, shade, reference);
+			if (tex != null)
+			{
+				tex[i] = -1;
+			}
+		}
+		return 1;
 	}
 
 	private void paintPaint(SceneTilePaint paint, int target, boolean shade, int reference)
@@ -250,9 +340,9 @@ public class FloorReplacerPlugin extends Plugin
 	 */
 	private static int recolor(int original, int target, boolean shade, int reference)
 	{
-		if (original == HIDDEN)
+		if (original == HIDDEN || original < 0)
 		{
-			return HIDDEN;
+			return original;
 		}
 		if (!shade)
 		{
@@ -317,6 +407,22 @@ public class FloorReplacerPlugin extends Plugin
 				paint.setNeColor(orig[2]);
 				paint.setNwColor(orig[3]);
 				paint.setTexture(orig[4]);
+			}
+			else if (key instanceof Model)
+			{
+				Model model = (Model) key;
+				int n = model.getFaceCount();
+				System.arraycopy(orig, 0, model.getFaceColors1(), 0, n);
+				System.arraycopy(orig, n, model.getFaceColors2(), 0, n);
+				System.arraycopy(orig, 2 * n, model.getFaceColors3(), 0, n);
+				short[] tex = model.getFaceTextures();
+				if (tex != null && orig.length == 4 * n)
+				{
+					for (int i = 0; i < n; i++)
+					{
+						tex[i] = (short) orig[3 * n + i];
+					}
+				}
 			}
 			else if (key instanceof SceneTileModel)
 			{

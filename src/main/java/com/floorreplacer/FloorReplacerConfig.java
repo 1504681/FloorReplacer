@@ -31,4 +31,15 @@ public interface FloorReplacerConfig extends Config
 	{
 		return true;
 	}
+
+	@ConfigItem(
+		keyName = "floorObjects",
+		name = "Flat floor objects",
+		description = "Also recolour flat models lying on the ground: mosaics, paving, rugs, trapdoors, puddles. Anything with height is left alone.",
+		position = 2
+	)
+	default boolean floorObjects()
+	{
+		return true;
+	}
 }
