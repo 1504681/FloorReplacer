@@ -39,12 +39,12 @@ public interface FloorReplacerConfig extends Config
 	@ConfigItem(
 		keyName = "minBrightness",
 		name = "Min brightness",
-		description = "With Keep shading on, no tile is drawn darker than this. 0 means no limit.",
+		description = "With Keep shading on, no tile is drawn darker than this.",
 		position = 2
 	)
 	default int minBrightness()
 	{
-		return 0;
+		return 20;
 	}
 
 	@Range(min = 0, max = 100)
@@ -52,12 +52,12 @@ public interface FloorReplacerConfig extends Config
 	@ConfigItem(
 		keyName = "maxBrightness",
 		name = "Max brightness",
-		description = "With Keep shading on, no tile is drawn brighter than this. 100 means no limit.",
+		description = "With Keep shading on, no tile is drawn brighter than this.",
 		position = 3
 	)
 	default int maxBrightness()
 	{
-		return 100;
+		return 80;
 	}
 
 	@ConfigItem(

@@ -12,7 +12,7 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Keep shading** (on by default) keeps each tile's light and dark variation relative to the average floor brightness, so hills, slopes and paths are still readable in the new colour. Turn it off for one perfectly flat colour with no shading at all.
 
-**Min brightness** and **Max brightness** (0% and 100% by default, meaning no limit) clamp the shaded result, so a sunlit plateau can't wash out to near white and a shadowed dungeon can't go near black. They only apply while Keep shading is on.
+**Min brightness** and **Max brightness** (20% and 80% by default) clamp the shaded result, so a sunlit plateau can't wash out to near white and a shadowed dungeon can't go near black. They only apply while Keep shading is on. 0% and 100% mean no limit.
 
 **Flat floor objects** (on by default) also recolours ground models no taller than about a fifth of a tile: mosaics, paving, rugs, trapdoors, puddles. Off limits the plugin to the terrain itself.
 
