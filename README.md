@@ -18,7 +18,9 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 ## Changelog
 
-1.0.0: first release.
+1.0.1: default colour #64878D, default brightness clamp 20% to 50%.
+
+1.0.0: first release. Terrain and flat floor models painted one colour, optional shading with min/max brightness, walking surfaces of thick floor models.
 
 ## License
 
