@@ -16,6 +16,7 @@ import net.runelite.api.GameState;
 import net.runelite.api.GroundObject;
 import net.runelite.api.JagexColor;
 import net.runelite.api.Model;
+import net.runelite.api.Point;
 import net.runelite.api.Renderable;
 import net.runelite.api.Scene;
 import net.runelite.api.SceneTileModel;
@@ -50,6 +51,10 @@ public class FloorReplacerPlugin extends Plugin
 	private static final double DEFAULT_BRIGHTNESS = 0.8;
 	// Objects no taller than this (in model units; a tile is 128 wide) count as floor: mosaics, rugs, paving, puddles
 	private static final int FLAT_OBJECT_HEIGHT = 24;
+	// For taller objects (arena platforms, docks, bridges) only faces that are level (vertex heights within
+	// FACE_SLOPE) and lie at a plane's tile height (within HEIGHT_TOLERANCE) are floor: the top you walk on
+	private static final int FACE_SLOPE = 6;
+	private static final int HEIGHT_TOLERANCE = 24;
 
 	@Inject
 	private Client client;
@@ -165,6 +170,7 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		int reference = shade ? averageLuminance(tiles) : 0;
 
+		int[][][] heights = scene.getTileHeights();
 		int painted = 0;
 		for (Tile[][] plane : tiles)
 		{
@@ -176,11 +182,11 @@ public class FloorReplacerPlugin extends Plugin
 					{
 						continue;
 					}
-					painted += paintTile(tile, target, shade, reference, objects);
+					painted += paintTile(tile, heights, target, shade, reference, objects);
 					Tile bridge = tile.getBridge();
 					if (bridge != null)
 					{
-						painted += paintTile(bridge, target, shade, reference, objects);
+						painted += paintTile(bridge, heights, target, shade, reference, objects);
 					}
 				}
 			}
@@ -191,7 +197,7 @@ public class FloorReplacerPlugin extends Plugin
 		log.debug("Painted {} floor tiles in world view {}", painted, scene.getWorldViewId());
 	}
 
-	private int paintTile(Tile tile, int target, boolean shade, int reference, boolean objects)
+	private int paintTile(Tile tile, int[][][] heights, int target, boolean shade, int reference, boolean objects)
 	{
 		int painted = 0;
 		SceneTilePaint paint = tile.getSceneTilePaint();
@@ -208,10 +214,11 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		if (objects)
 		{
+			int[] levels = walkableHeights(tile, heights);
 			GroundObject ground = tile.getGroundObject();
 			if (ground != null)
 			{
-				painted += paintFlatObject(ground.getRenderable(), target, shade, reference);
+				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), levels, target, shade, reference);
 			}
 			GameObject[] gameObjects = tile.getGameObjects();
 			if (gameObjects != null)
@@ -220,7 +227,7 @@ public class FloorReplacerPlugin extends Plugin
 				{
 					if (gameObject != null)
 					{
-						painted += paintFlatObject(gameObject.getRenderable(), target, shade, reference);
+						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), levels, target, shade, reference);
 					}
 				}
 			}
@@ -228,11 +235,35 @@ public class FloorReplacerPlugin extends Plugin
 		return painted;
 	}
 
+	/** Tile heights of every plane at this tile's column, or empty when the tile is outside the height map. */
+	private static int[] walkableHeights(Tile tile, int[][][] heights)
+	{
+		Point loc = tile.getSceneLocation();
+		if (heights == null || loc == null)
+		{
+			return new int[0];
+		}
+		int sx = loc.getX();
+		int sy = loc.getY();
+		int[] out = new int[heights.length];
+		int count = 0;
+		for (int[][] plane : heights)
+		{
+			if (plane != null && sx >= 0 && sx < plane.length && plane[sx] != null && sy >= 0 && sy < plane[sx].length)
+			{
+				out[count++] = plane[sx][sy];
+			}
+		}
+		return count == out.length ? out : java.util.Arrays.copyOf(out, count);
+	}
+
 	/**
-	 * Floors that are really models lying on the tile (mosaics, paving, rugs, trapdoors, puddles). Only static,
-	 * near-flat models qualify; animated objects, actors and anything with height are left alone.
+	 * Floors that are really models on the tile. A near-flat model (mosaic, paving, rug, trapdoor, puddle) is
+	 * painted whole. A taller static model (arena platform, dock, bridge deck) only has its level faces painted,
+	 * and only those sitting at a plane's tile height: the surface you walk on, not the sides or the underside.
+	 * Animated objects and actors are left alone.
 	 */
-	private int paintFlatObject(Renderable renderable, int target, boolean shade, int reference)
+	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, int target, boolean shade, int reference)
 	{
 		if (!(renderable instanceof Model))
 		{
@@ -243,25 +274,70 @@ public class FloorReplacerPlugin extends Plugin
 		int[] c2 = model.getFaceColors2();
 		int[] c3 = model.getFaceColors3();
 		float[] ys = model.getVerticesY();
-		if (c1 == null || c2 == null || c3 == null || ys == null)
+		int[] f1 = model.getFaceIndices1();
+		int[] f2 = model.getFaceIndices2();
+		int[] f3 = model.getFaceIndices3();
+		if (c1 == null || c2 == null || c3 == null || ys == null || f1 == null || f2 == null || f3 == null)
 		{
 			return 0;
 		}
 		int n = model.getFaceCount();
 		int vertices = Math.min(model.getVerticesCount(), ys.length);
-		if (!originals.containsKey(model))
+		if (vertices == 0 || n == 0)
 		{
-			float min = Float.MAX_VALUE;
-			float max = -Float.MAX_VALUE;
-			for (int i = 0; i < vertices; i++)
-			{
-				min = Math.min(min, ys[i]);
-				max = Math.max(max, ys[i]);
-			}
-			if (vertices == 0 || max - min > FLAT_OBJECT_HEIGHT)
+			return 0;
+		}
+		float min = Float.MAX_VALUE;
+		float max = -Float.MAX_VALUE;
+		for (int i = 0; i < vertices; i++)
+		{
+			min = Math.min(min, ys[i]);
+			max = Math.max(max, ys[i]);
+		}
+
+		boolean[] mask = null;
+		if (max - min > FLAT_OBJECT_HEIGHT)
+		{
+			if (levels.length == 0)
 			{
 				return 0;
 			}
+			mask = new boolean[n];
+			boolean any = false;
+			for (int i = 0; i < n; i++)
+			{
+				if (f1[i] >= vertices || f2[i] >= vertices || f3[i] >= vertices)
+				{
+					continue;
+				}
+				float y1 = ys[f1[i]];
+				float y2 = ys[f2[i]];
+				float y3 = ys[f3[i]];
+				float lo = Math.min(y1, Math.min(y2, y3));
+				float hi = Math.max(y1, Math.max(y2, y3));
+				if (hi - lo > FACE_SLOPE)
+				{
+					continue;
+				}
+				float absolute = objectZ + (y1 + y2 + y3) / 3f;
+				for (int level : levels)
+				{
+					if (Math.abs(absolute - level) <= HEIGHT_TOLERANCE)
+					{
+						mask[i] = true;
+						any = true;
+						break;
+					}
+				}
+			}
+			if (!any)
+			{
+				return 0;
+			}
+		}
+
+		if (!originals.containsKey(model))
+		{
 			short[] tex = model.getFaceTextures();
 			int[] copy = new int[tex != null ? 4 * n : 3 * n];
 			System.arraycopy(c1, 0, copy, 0, n);
@@ -280,6 +356,10 @@ public class FloorReplacerPlugin extends Plugin
 		short[] tex = model.getFaceTextures();
 		for (int i = 0; i < n; i++)
 		{
+			if (mask != null && !mask[i])
+			{
+				continue;
+			}
 			c1[i] = recolor(orig[i], target, shade, reference);
 			c2[i] = recolor(orig[n + i], target, shade, reference);
 			// colour3 of -1 means flat-shaded face, -2 means hidden face; both must survive

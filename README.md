@@ -14,7 +14,7 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Min brightness** and **Max brightness** (20% and 80% by default) clamp the shaded result, so a sunlit plateau can't wash out to near white and a shadowed dungeon can't go near black. They only apply while Keep shading is on. 0% and 100% mean no limit.
 
-**Flat floor objects** (on by default) also recolours ground models no taller than about a fifth of a tile: mosaics, paving, rugs, trapdoors, puddles. Off limits the plugin to the terrain itself.
+**Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted. Off limits the plugin to the terrain itself.
 
 ## Changelog
 
