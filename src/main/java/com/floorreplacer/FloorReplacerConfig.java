@@ -18,7 +18,7 @@ public interface FloorReplacerConfig extends Config
 	)
 	default Color color()
 	{
-		return new Color(60, 140, 60);
+		return new Color(0x59, 0xBD, 0xAC);
 	}
 
 	@ConfigItem(

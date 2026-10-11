@@ -37,7 +37,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 @PluginDescriptor(
 	name = "Floor Replacer",
 	description = "Paints every floor tile in the scene a single colour of your choice",
-	tags = {"floor", "ground", "colour", "color", "texture", "recolor", "scene", "terrain"}
+	tags = {"floor", "ground", "colour", "color", "texture", "recolor", "scene", "terrain", "blindfold", "skybox", "clear", "flat", "visibility"}
 )
 public class FloorReplacerPlugin extends Plugin
 {

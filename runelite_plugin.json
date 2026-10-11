@@ -13,7 +13,12 @@
     "texture",
     "recolor",
     "scene",
-    "terrain"
+    "terrain",
+    "blindfold",
+    "skybox",
+    "clear",
+    "flat",
+    "visibility"
   ],
   "version": "1.0.0"
 }
