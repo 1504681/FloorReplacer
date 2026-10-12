@@ -4,6 +4,7 @@ import java.awt.Color;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
 import net.runelite.client.config.Units;
 
@@ -11,6 +12,36 @@ import net.runelite.client.config.Units;
 public interface FloorReplacerConfig extends Config
 {
 	String GROUP = "floorreplacer";
+
+	enum AreaMode
+	{
+		EVERYWHERE("Everywhere"),
+		SELECTED_AREAS("Selected areas only");
+
+		private final String label;
+
+		AreaMode(String label)
+		{
+			this.label = label;
+		}
+
+		@Override
+		public String toString()
+		{
+			return label;
+		}
+	}
+
+	@ConfigItem(
+		keyName = "areaMode",
+		name = "Where",
+		description = "Paint the floor everywhere, or only in the areas ticked below",
+		position = -1
+	)
+	default AreaMode areaMode()
+	{
+		return AreaMode.EVERYWHERE;
+	}
 
 	@ConfigItem(
 		keyName = "color",
@@ -69,5 +100,139 @@ public interface FloorReplacerConfig extends Config
 	default boolean floorObjects()
 	{
 		return true;
+	}
+
+	@ConfigSection(
+		name = "Areas",
+		description = "Which areas get the painted floor when Where is set to Selected areas only",
+		position = 10,
+		closedByDefault = true
+	)
+	String areas = "areas";
+
+	@ConfigItem(keyName = "tobMaiden", name = "ToB: Maiden", description = "Paint the floor in Maiden", section = areas, position = 0)
+	default boolean tobMaiden()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "tobBloat", name = "ToB: Bloat", description = "Paint the floor in Bloat", section = areas, position = 1)
+	default boolean tobBloat()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "tobNylocas", name = "ToB: Nylocas", description = "Paint the floor in Nylocas", section = areas, position = 2)
+	default boolean tobNylocas()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "tobSotetseg", name = "ToB: Sotetseg", description = "Paint the floor in Sotetseg", section = areas, position = 3)
+	default boolean tobSotetseg()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "tobXarpus", name = "ToB: Xarpus", description = "Paint the floor in Xarpus", section = areas, position = 4)
+	default boolean tobXarpus()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "tobVerzik", name = "ToB: Verzik", description = "Paint the floor in Verzik", section = areas, position = 5)
+	default boolean tobVerzik()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "toaZebak", name = "ToA: Crondis + Zebak", description = "Paint the floor in Crondis + Zebak", section = areas, position = 6)
+	default boolean toaZebak()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "toaKephri", name = "ToA: Scabaras + Kephri", description = "Paint the floor in Scabaras + Kephri", section = areas, position = 7)
+	default boolean toaKephri()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "toaAkkha", name = "ToA: Het + Akkha", description = "Paint the floor in Het + Akkha", section = areas, position = 8)
+	default boolean toaAkkha()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "toaBaba", name = "ToA: Apmeken + Ba-Ba", description = "Paint the floor in Apmeken + Ba-Ba", section = areas, position = 9)
+	default boolean toaBaba()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "toaWardens", name = "ToA: Wardens", description = "Paint the floor in Wardens", section = areas, position = 10)
+	default boolean toaWardens()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "cox", name = "Chambers of Xeric", description = "Paint the floor in Chambers of Xeric", section = areas, position = 11)
+	default boolean cox()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "inferno", name = "Inferno", description = "Paint the floor in Inferno", section = areas, position = 12)
+	default boolean inferno()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "fightCave", name = "Fight Cave", description = "Paint the floor in Fight Cave", section = areas, position = 13)
+	default boolean fightCave()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "colosseum", name = "Fortis Colosseum", description = "Paint the floor in Fortis Colosseum", section = areas, position = 14)
+	default boolean colosseum()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "doom", name = "Doom of Mokhaiotl", description = "Paint the floor in Doom of Mokhaiotl", section = areas, position = 15)
+	default boolean doom()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "nex", name = "Nex", description = "Paint the floor in Nex", section = areas, position = 16)
+	default boolean nex()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "nightmare", name = "Nightmare", description = "Paint the floor in Nightmare", section = areas, position = 17)
+	default boolean nightmare()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "yama", name = "Yama", description = "Paint the floor in Yama", section = areas, position = 18)
+	default boolean yama()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "customRegions",
+		name = "Custom region IDs",
+		description = "Extra map regions to paint, comma separated (the ::loc command or the Region Locker plugin show the ID you stand in). Instanced areas use their template region.",
+		section = areas,
+		position = 50
+	)
+	default String customRegions()
+	{
+		return "";
 	}
 }

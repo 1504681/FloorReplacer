@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
 import java.util.Set;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import net.runelite.api.Constants;
 import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
 import net.runelite.api.GroundObject;
+import net.runelite.api.Player;
 import net.runelite.api.JagexColor;
 import net.runelite.api.Model;
 import net.runelite.api.Point;
@@ -24,7 +26,9 @@ import net.runelite.api.SceneTilePaint;
 import net.runelite.api.TextureProvider;
 import net.runelite.api.Tile;
 import net.runelite.api.WorldView;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.WorldViewLoaded;
 import net.runelite.api.hooks.DrawCallbacks;
 import net.runelite.client.callback.ClientThread;
@@ -42,7 +46,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.0.1";
+	static final String VERSION = "1.1.0";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -70,6 +74,11 @@ public class FloorReplacerPlugin extends Plugin
 	private final Map<Object, int[]> originals = new IdentityHashMap<>();
 	private final Set<Scene> paintedScenes = Collections.newSetFromMap(new IdentityHashMap<>());
 
+	// Map region the local player stands in (template region inside instances); -1 when unknown
+	private int currentRegion = -1;
+	// True while the current scene carries our colours
+	private boolean painted;
+
 	// Luminance clamp (0..127) applied when shading is kept; set from config at the start of each paint pass
 	private int minLum = 0;
 	private int maxLum = JagexColor.LUMINANCE_MAX;
@@ -83,7 +92,8 @@ public class FloorReplacerPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
-		clientThread.invoke(this::paintAll);
+		currentRegion = -1;
+		clientThread.invoke(this::evaluate);
 	}
 
 	@Override
@@ -103,9 +113,11 @@ public class FloorReplacerPlugin extends Plugin
 				// The scene is about to be rebuilt; the old paints/models are garbage now
 				originals.clear();
 				paintedScenes.clear();
+				painted = false;
+				currentRegion = -1;
 				break;
 			case LOGGED_IN:
-				paintAll();
+				evaluate();
 				break;
 			default:
 				break;
@@ -115,7 +127,16 @@ public class FloorReplacerPlugin extends Plugin
 	@Subscribe
 	public void onWorldViewLoaded(WorldViewLoaded event)
 	{
-		paintScene(event.getWorldView().getScene());
+		if (wanted())
+		{
+			paintScene(event.getWorldView().getScene());
+		}
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick event)
+	{
+		evaluate();
 	}
 
 	@Subscribe
@@ -128,8 +149,133 @@ public class FloorReplacerPlugin extends Plugin
 		clientThread.invoke(() ->
 		{
 			restoreAll();
-			paintAll();
+			evaluate();
 		});
+	}
+
+	/**
+	 * Paint or restore the scene according to where the player is. Cheap enough to run every tick: it only acts
+	 * when the wanted state differs from the current one.
+	 */
+	private void evaluate()
+	{
+		if (client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+		Player local = client.getLocalPlayer();
+		if (local != null && local.getLocalLocation() != null)
+		{
+			currentRegion = WorldPoint.fromLocalInstance(client, local.getLocalLocation()).getRegionID();
+		}
+		boolean want = wanted();
+		if (want && !painted)
+		{
+			paintAll();
+		}
+		else if (!want && painted)
+		{
+			restoreAll();
+		}
+	}
+
+	private boolean wanted()
+	{
+		if (config.areaMode() == FloorReplacerConfig.AreaMode.EVERYWHERE)
+		{
+			return true;
+		}
+		return currentRegion != -1 && regionEnabled(currentRegion);
+	}
+
+	// Region IDs cross-checked against the Watchdog, Blert and Automatic Low Detail plugins
+	private boolean regionEnabled(int region)
+	{
+		switch (region)
+		{
+			case 12613:
+				return config.tobMaiden();
+			case 13125:
+				return config.tobBloat();
+			case 13122:
+				return config.tobNylocas();
+			case 13123:
+			case 13379:
+				return config.tobSotetseg();
+			case 12612:
+				return config.tobXarpus();
+			case 12611:
+				return config.tobVerzik();
+			case 15698:
+			case 15700:
+				return config.toaZebak();
+			case 14162:
+			case 14164:
+				return config.toaKephri();
+			case 14674:
+			case 14676:
+				return config.toaAkkha();
+			case 15186:
+			case 15188:
+				return config.toaBaba();
+			case 15184:
+			case 15696:
+				return config.toaWardens();
+			case 13136:
+			case 13137:
+			case 13393:
+			case 13138:
+			case 13394:
+			case 13139:
+			case 13395:
+			case 13140:
+			case 13396:
+			case 13141:
+			case 13397:
+			case 13145:
+			case 13401:
+			case 12889:
+				return config.cox();
+			case 9043:
+				return config.inferno();
+			case 9551:
+				return config.fightCave();
+			case 7216:
+				return config.colosseum();
+			case 5269:
+			case 13668:
+			case 14180:
+				return config.doom();
+			case 11601:
+				return config.nex();
+			case 15515:
+				return config.nightmare();
+			case 5789:
+			case 6045:
+				return config.yama();
+			default:
+				return customRegions().contains(region);
+		}
+	}
+
+	private Set<Integer> customRegions()
+	{
+		Set<Integer> out = new HashSet<>();
+		for (String part : config.customRegions().split("[,\\s]+"))
+		{
+			try
+			{
+				if (!part.isEmpty())
+				{
+					out.add(Integer.parseInt(part.trim()));
+				}
+			}
+			catch (NumberFormatException ignored)
+			{
+				// typo in the list; skip it
+			}
+		}
+		return out;
 	}
 
 	private void paintAll()
@@ -171,7 +317,7 @@ public class FloorReplacerPlugin extends Plugin
 		int reference = shade ? averageLuminance(tiles) : 0;
 
 		int[][][] heights = scene.getTileHeights();
-		int painted = 0;
+		int count = 0;
 		for (Tile[][] plane : tiles)
 		{
 			for (Tile[] column : plane)
@@ -182,19 +328,20 @@ public class FloorReplacerPlugin extends Plugin
 					{
 						continue;
 					}
-					painted += paintTile(tile, heights, target, shade, reference, objects);
+					count += paintTile(tile, heights, target, shade, reference, objects);
 					Tile bridge = tile.getBridge();
 					if (bridge != null)
 					{
-						painted += paintTile(bridge, heights, target, shade, reference, objects);
+						count += paintTile(bridge, heights, target, shade, reference, objects);
 					}
 				}
 			}
 		}
 
 		paintedScenes.add(scene);
+		painted = true;
 		invalidate(scene);
-		log.debug("Painted {} floor tiles in world view {}", painted, scene.getWorldViewId());
+		log.debug("Painted {} floor tiles in world view {}", count, scene.getWorldViewId());
 	}
 
 	private int paintTile(Tile tile, int[][][] heights, int target, boolean shade, int reference, boolean objects)
@@ -531,6 +678,7 @@ public class FloorReplacerPlugin extends Plugin
 			}
 		}
 		originals.clear();
+		painted = false;
 
 		List<Scene> scenes = new ArrayList<>(paintedScenes);
 		paintedScenes.clear();

@@ -8,6 +8,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 ## Settings
 
+**Where** is Everywhere by default. Set it to Selected areas only and the floor is painted just in the areas ticked under Areas: each Theatre of Blood room, each Tombs of Amascut boss (with its puzzle room), Chambers of Xeric, Inferno, Fight Cave, Fortis Colosseum, Doom of Mokhaiotl, Nex, Nightmare and Yama, all on by default. **Custom region IDs** takes extra map regions, comma separated, for anywhere else. The floor switches back to normal the moment you leave a selected area.
+
 **Floor colour** is the colour every tile gets. Default is a muted slate blue (#64878D).
 
 **Keep shading** (on by default) keeps each tile's light and dark variation relative to the average floor brightness, so hills, slopes and paths are still readable in the new colour. Turn it off for one perfectly flat colour with no shading at all.
@@ -17,6 +19,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 **Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted. Off limits the plugin to the terrain itself.
 
 ## Changelog
+
+1.1.0: area toggles. Paint everywhere, or only in selected raid and boss rooms plus custom region IDs.
 
 1.0.1: default colour #64878D, default brightness clamp 20% to 50%.
 
