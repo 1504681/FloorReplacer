@@ -235,4 +235,15 @@ public interface FloorReplacerConfig extends Config
 	{
 		return "";
 	}
+
+	@ConfigItem(
+		keyName = "debugLog",
+		name = "Log the tile under you",
+		description = "Writes what is on the tile you step onto (terrain, floor objects, heights, painted or not) to the client log. For bug reports about floors that stay unpainted.",
+		position = 51
+	)
+	default boolean debugLog()
+	{
+		return false;
+	}
 }

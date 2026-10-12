@@ -2,6 +2,7 @@ package com.floorreplacer;
 
 import com.google.inject.Provides;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -12,6 +13,8 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Constants;
+import net.runelite.api.DecorativeObject;
+import net.runelite.api.DynamicObject;
 import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
 import net.runelite.api.GroundObject;
@@ -26,6 +29,7 @@ import net.runelite.api.SceneTilePaint;
 import net.runelite.api.TextureProvider;
 import net.runelite.api.Tile;
 import net.runelite.api.WorldView;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
@@ -46,7 +50,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.1.0";
+	static final String VERSION = "1.1.1";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -56,9 +60,11 @@ public class FloorReplacerPlugin extends Plugin
 	// Objects no taller than this (in model units; a tile is 128 wide) count as floor: mosaics, rugs, paving, puddles
 	private static final int FLAT_OBJECT_HEIGHT = 24;
 	// For taller objects (arena platforms, docks, bridges) only faces that are level (vertex heights within
-	// FACE_SLOPE) and lie at a plane's tile height (within HEIGHT_TOLERANCE) are floor: the top you walk on
+	// FACE_SLOPE) and lie at a plane's tile height (within HEIGHT_TOLERANCE) are floor: the top you walk on.
+	// Half a tile of tolerance covers raised slabs such as the Wardens obelisk platform while staying well
+	// below the top of any wall
 	private static final int FACE_SLOPE = 6;
-	private static final int HEIGHT_TOLERANCE = 24;
+	private static final int HEIGHT_TOLERANCE = 64;
 
 	@Inject
 	private Client client;
@@ -78,6 +84,8 @@ public class FloorReplacerPlugin extends Plugin
 	private int currentRegion = -1;
 	// True while the current scene carries our colours
 	private boolean painted;
+	// Tile last written to the debug log, so each tile is described once per visit
+	private int lastDebugTile = -1;
 
 	// Luminance clamp (0..127) applied when shading is kept; set from config at the start of each paint pass
 	private int minLum = 0;
@@ -137,6 +145,10 @@ public class FloorReplacerPlugin extends Plugin
 	public void onGameTick(GameTick event)
 	{
 		evaluate();
+		if (config.debugLog())
+		{
+			debugTile();
+		}
 	}
 
 	@Subscribe
@@ -690,6 +702,153 @@ public class FloorReplacerPlugin extends Plugin
 
 	// Tell the GPU plugin (if it is on) to re-upload the whole scene; the software renderer reads the
 	// colours every frame and needs nothing.
+	/**
+	 * Describe the tile the player stands on in the client log: terrain, every object on it and why each was or
+	 * was not painted. For bug reports about floors that stay unpainted.
+	 */
+	private void debugTile()
+	{
+		Player local = client.getLocalPlayer();
+		WorldView view = local != null ? local.getWorldView() : null;
+		LocalPoint lp = local != null ? local.getLocalLocation() : null;
+		Scene scene = view != null ? view.getScene() : null;
+		if (scene == null || lp == null)
+		{
+			return;
+		}
+		int plane = view.getPlane();
+		int sx = lp.getSceneX();
+		int sy = lp.getSceneY();
+		int key = (plane << 16) | ((sx & 0xFF) << 8) | (sy & 0xFF);
+		if (key == lastDebugTile)
+		{
+			return;
+		}
+		lastDebugTile = key;
+		Tile[][][] tiles = scene.getTiles();
+		if (tiles == null || plane < 0 || plane >= tiles.length || sx < 0 || sx >= tiles[plane].length
+			|| sy < 0 || sy >= tiles[plane][sx].length || tiles[plane][sx][sy] == null)
+		{
+			log.info("Floor Replacer: no tile at plane {} scene {},{}", plane, sx, sy);
+			return;
+		}
+		Tile tile = tiles[plane][sx][sy];
+		int[] levels = walkableHeights(tile, scene.getTileHeights());
+		StringBuilder sb = new StringBuilder("Floor Replacer: plane ").append(plane)
+			.append(" scene ").append(sx).append(',').append(sy)
+			.append(" region ").append(currentRegion)
+			.append(" painted=").append(painted)
+			.append(" heights=").append(Arrays.toString(levels));
+		SceneTilePaint paint = tile.getSceneTilePaint();
+		if (paint != null)
+		{
+			sb.append(" | paint tex=").append(paint.getTexture()).append(" sw=").append(paint.getSwColor())
+				.append(originals.containsKey(paint) ? " (painted)" : " (not painted)");
+		}
+		SceneTileModel model = tile.getSceneTileModel();
+		if (model != null)
+		{
+			int[] a = model.getTriangleColorA();
+			sb.append(" | tile model tris=").append(a != null ? a.length : -1)
+				.append(originals.containsKey(model) ? " (painted)" : " (not painted)");
+		}
+		GroundObject ground = tile.getGroundObject();
+		if (ground != null)
+		{
+			describe(sb, "ground", ground.getId(), ground.getRenderable(), ground.getZ(), levels);
+		}
+		GameObject[] gameObjects = tile.getGameObjects();
+		if (gameObjects != null)
+		{
+			for (GameObject gameObject : gameObjects)
+			{
+				if (gameObject != null)
+				{
+					describe(sb, "object", gameObject.getId(), gameObject.getRenderable(), gameObject.getZ(), levels);
+				}
+			}
+		}
+		DecorativeObject deco = tile.getDecorativeObject();
+		if (deco != null)
+		{
+			describe(sb, "decor", deco.getId(), deco.getRenderable(), deco.getZ(), levels);
+			if (deco.getRenderable2() != null)
+			{
+				describe(sb, "decor2", deco.getId(), deco.getRenderable2(), deco.getZ(), levels);
+			}
+		}
+		log.info(sb.toString());
+	}
+
+	private void describe(StringBuilder sb, String kind, int id, Renderable renderable, int objectZ, int[] levels)
+	{
+		sb.append(" | ").append(kind).append(' ').append(id).append(' ');
+		if (renderable == null)
+		{
+			sb.append("null");
+			return;
+		}
+		if (!(renderable instanceof Model))
+		{
+			sb.append(renderable instanceof DynamicObject ? "animated (skipped)" : renderable.getClass().getSimpleName());
+			return;
+		}
+		Model model = (Model) renderable;
+		float[] ys = model.getVerticesY();
+		int[] f1 = model.getFaceIndices1();
+		int[] f2 = model.getFaceIndices2();
+		int[] f3 = model.getFaceIndices3();
+		int n = model.getFaceCount();
+		if (ys == null || f1 == null || f2 == null || f3 == null)
+		{
+			sb.append("model without geometry");
+			return;
+		}
+		int vertices = Math.min(model.getVerticesCount(), ys.length);
+		float min = Float.MAX_VALUE;
+		float max = -Float.MAX_VALUE;
+		for (int i = 0; i < vertices; i++)
+		{
+			min = Math.min(min, ys[i]);
+			max = Math.max(max, ys[i]);
+		}
+		int level = 0;
+		int atFloor = 0;
+		float nearest = Float.MAX_VALUE;
+		for (int i = 0; i < n; i++)
+		{
+			if (f1[i] >= vertices || f2[i] >= vertices || f3[i] >= vertices)
+			{
+				continue;
+			}
+			float y1 = ys[f1[i]];
+			float y2 = ys[f2[i]];
+			float y3 = ys[f3[i]];
+			if (Math.max(y1, Math.max(y2, y3)) - Math.min(y1, Math.min(y2, y3)) > FACE_SLOPE)
+			{
+				continue;
+			}
+			level++;
+			float absolute = objectZ + (y1 + y2 + y3) / 3f;
+			for (int h : levels)
+			{
+				float diff = Math.abs(absolute - h);
+				nearest = Math.min(nearest, diff);
+			}
+			for (int h : levels)
+			{
+				if (Math.abs(absolute - h) <= HEIGHT_TOLERANCE)
+				{
+					atFloor++;
+					break;
+				}
+			}
+		}
+		sb.append(String.format("model faces=%d levelFaces=%d atFloor=%d y=%.0f..%.0f z=%d nearest=%s textured=%b %s",
+			n, level, atFloor, min, max, objectZ, nearest == Float.MAX_VALUE ? "-" : String.format("%.0f", nearest),
+			model.getFaceTextures() != null, originals.containsKey(model) ? "(painted)" : "(not painted)"));
+	}
+
 	private void invalidate(Scene scene)
 	{
 		DrawCallbacks callbacks = client.getDrawCallbacks();
