@@ -31,7 +31,9 @@ import net.runelite.api.Tile;
 import net.runelite.api.WorldView;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GroundObjectSpawned;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.WorldViewLoaded;
 import net.runelite.api.hooks.DrawCallbacks;
@@ -50,7 +52,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.1.1";
+	static final String VERSION = "1.1.2";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -60,11 +62,11 @@ public class FloorReplacerPlugin extends Plugin
 	// Objects no taller than this (in model units; a tile is 128 wide) count as floor: mosaics, rugs, paving, puddles
 	private static final int FLAT_OBJECT_HEIGHT = 24;
 	// For taller objects (arena platforms, docks, bridges) only faces that are level (vertex heights within
-	// FACE_SLOPE) and lie at a plane's tile height (within HEIGHT_TOLERANCE) are floor: the top you walk on.
-	// Half a tile of tolerance covers raised slabs such as the Wardens obelisk platform while staying well
-	// below the top of any wall
+	// FACE_SLOPE) and lie at a plane's tile height (within HEIGHT_TOLERANCE) are floor: the top you walk on
 	private static final int FACE_SLOPE = 6;
-	private static final int HEIGHT_TOLERANCE = 64;
+	private static final int HEIGHT_TOLERANCE = 24;
+	// Scene coordinate -> extended scene coordinate, the space the GPU plugin's zones are indexed in
+	private static final int SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2;
 
 	@Inject
 	private Client client;
@@ -84,6 +86,10 @@ public class FloorReplacerPlugin extends Plugin
 	private int currentRegion = -1;
 	// True while the current scene carries our colours
 	private boolean painted;
+	// Colour parameters of the last paint pass, reused for floors that spawn later
+	private int paintTarget;
+	private boolean paintShade;
+	private int paintReference;
 	// Tile last written to the debug log, so each tile is described once per visit
 	private int lastDebugTile = -1;
 
@@ -125,6 +131,9 @@ public class FloorReplacerPlugin extends Plugin
 				currentRegion = -1;
 				break;
 			case LOGGED_IN:
+				// Repaint even if WorldViewLoaded already did: objects the server places right after the map
+				// rebuild are on the tiles by now, and a second pass over painted tiles is a no-op
+				painted = false;
 				evaluate();
 				break;
 			default:
@@ -138,6 +147,60 @@ public class FloorReplacerPlugin extends Plugin
 		if (wanted())
 		{
 			paintScene(event.getWorldView().getScene());
+		}
+	}
+
+	@Subscribe
+	public void onGameObjectSpawned(GameObjectSpawned event)
+	{
+		GameObject object = event.getGameObject();
+		paintSpawned(event.getTile(), object.getRenderable(), object.getZ(), object.getSceneMinLocation(), object.getSceneMaxLocation());
+	}
+
+	@Subscribe
+	public void onGroundObjectSpawned(GroundObjectSpawned event)
+	{
+		GroundObject object = event.getGroundObject();
+		Point loc = event.getTile() != null ? event.getTile().getSceneLocation() : null;
+		paintSpawned(event.getTile(), object.getRenderable(), object.getZ(), loc, loc);
+	}
+
+	/**
+	 * Floors that appear after the scene was painted: decorations an instance places once the map is built,
+	 * arena platforms spawned when a fight starts. Painted on the spot and the zones they cover re-uploaded.
+	 */
+	private void paintSpawned(Tile tile, Renderable renderable, int objectZ, Point min, Point max)
+	{
+		if (!painted || tile == null || !config.floorObjects() || client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+		WorldView top = client.getTopLevelWorldView();
+		Scene scene = top != null ? top.getScene() : null;
+		if (scene == null || !paintedScenes.contains(scene))
+		{
+			return;
+		}
+		int[] levels = walkableHeights(tile, scene.getTileHeights());
+		if (paintFloorObject(renderable, objectZ, levels, paintTarget, paintShade, paintReference) == 0)
+		{
+			return;
+		}
+		DrawCallbacks callbacks = client.getDrawCallbacks();
+		if (callbacks == null || min == null || max == null)
+		{
+			return;
+		}
+		int zx0 = Math.max(0, (min.getX() + SCENE_OFFSET) / ZONE_SIZE);
+		int zy0 = Math.max(0, (min.getY() + SCENE_OFFSET) / ZONE_SIZE);
+		int zx1 = Math.min(ZONES - 1, (max.getX() + SCENE_OFFSET) / ZONE_SIZE);
+		int zy1 = Math.min(ZONES - 1, (max.getY() + SCENE_OFFSET) / ZONE_SIZE);
+		for (int x = zx0; x <= zx1; x++)
+		{
+			for (int y = zy0; y <= zy1; y++)
+			{
+				callbacks.invalidateZone(scene, x, y);
+			}
 		}
 	}
 
@@ -327,6 +390,9 @@ public class FloorReplacerPlugin extends Plugin
 			maxLum = minLum;
 		}
 		int reference = shade ? averageLuminance(tiles) : 0;
+		paintTarget = target;
+		paintShade = shade;
+		paintReference = reference;
 
 		int[][][] heights = scene.getTileHeights();
 		int count = 0;

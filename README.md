@@ -16,13 +16,15 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Min brightness** and **Max brightness** (20% and 50% by default) clamp the shaded result, so a sunlit plateau can't wash out to near white and a shadowed dungeon can't go near black. They only apply while Keep shading is on. 0% and 100% mean no limit.
 
-**Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height (within half a tile) are painted. Off limits the plugin to the terrain itself.
+**Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted. Floors that appear later, such as decorations an instance places or an arena platform spawned when a fight starts, are painted as they appear. Off limits the plugin to the terrain itself.
 
 **Log the tile under you** (off by default) writes what is on each tile you step onto, and whether it was painted, to the client log. Turn it on, stand on the floor that stayed unpainted and paste the line into a bug report.
 
 ## Changelog
 
-1.1.1: raised floor slabs such as the Wardens obelisk platform are painted (walking height tolerance 24 to 64 units); debug log of the tile under you.
+1.1.2: floor objects spawned after the scene loaded (instance decorations, arena platforms placed when a fight starts) are painted as they appear, and the scene is repainted after every login. Walking height tolerance back to 24 units.
+
+1.1.1: debug log of the tile under you.
 
 1.1.0: area toggles. Paint everywhere, or only in selected raid and boss rooms plus custom region IDs.
 
