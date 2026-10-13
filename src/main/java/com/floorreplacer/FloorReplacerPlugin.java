@@ -50,7 +50,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.1.4";
+	static final String VERSION = "1.1.5";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -63,6 +63,11 @@ public class FloorReplacerPlugin extends Plugin
 	// FACE_SLOPE) and lie at a plane's tile height (within HEIGHT_TOLERANCE) are floor: the top you walk on
 	private static final int FACE_SLOPE = 6;
 	private static final int HEIGHT_TOLERANCE = 24;
+	// Floor objects that carry mechanic information and must keep their own look. Akkha's arena in Tombs of
+	// Amascut: AKKHA_PLATFORM01-24 (the quadrant floor), AKKHA_ARENA_OUTER_LVL1/LVL2 rings, the hourglass
+	// floor pieces (gameval ObjectID 45872-46067)
+	private static final int AKKHA_FLOOR_FIRST = 45872;
+	private static final int AKKHA_FLOOR_LAST = 46067;
 	// Scene.getTileHeights() is indexed in extended scene coordinates for the top-level world view, while
 	// Tile.getSceneLocation() is in plain scene coordinates (same convention as the GPU plugin's uploader)
 	private static final int SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2;
@@ -85,6 +90,8 @@ public class FloorReplacerPlugin extends Plugin
 	private int currentRegion = -1;
 	// True while the current scene carries our colours
 	private boolean painted;
+	// Object IDs the user never wants painted, parsed from config at each paint pass
+	private Set<Integer> excludedIds = Collections.emptySet();
 	// Tile last written to the debug log, so each tile is described once per visit
 	private int lastDebugTile = -1;
 
@@ -277,10 +284,20 @@ public class FloorReplacerPlugin extends Plugin
 		}
 	}
 
+	private boolean excluded(int objectId)
+	{
+		return (objectId >= AKKHA_FLOOR_FIRST && objectId <= AKKHA_FLOOR_LAST) || excludedIds.contains(objectId);
+	}
+
 	private Set<Integer> customRegions()
 	{
+		return parseIds(config.customRegions());
+	}
+
+	private static Set<Integer> parseIds(String list)
+	{
 		Set<Integer> out = new HashSet<>();
-		for (String part : config.customRegions().split("[,\\s]+"))
+		for (String part : list.split("[,\\s]+"))
 		{
 			try
 			{
@@ -334,6 +351,7 @@ public class FloorReplacerPlugin extends Plugin
 			maxLum = minLum;
 		}
 		int reference = shade ? averageLuminance(tiles) : 0;
+		excludedIds = parseIds(config.excludedObjects());
 
 		int[][][] heights = scene.getTileHeights();
 		int offset = heightOffset(scene);
@@ -383,7 +401,7 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			int[] levels = walkableHeights(tile, heights, offset);
 			GroundObject ground = tile.getGroundObject();
-			if (ground != null)
+			if (ground != null && !excluded(ground.getId()))
 			{
 				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), levels, target, shade, reference);
 			}
@@ -392,7 +410,7 @@ public class FloorReplacerPlugin extends Plugin
 			{
 				for (GameObject gameObject : gameObjects)
 				{
-					if (gameObject != null)
+					if (gameObject != null && !excluded(gameObject.getId()))
 					{
 						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), levels, target, shade, reference);
 					}
@@ -815,6 +833,10 @@ public class FloorReplacerPlugin extends Plugin
 	private void describe(StringBuilder sb, String kind, int id, Renderable renderable, int objectZ, int[] levels)
 	{
 		sb.append(" | ").append(kind).append(' ').append(id).append(' ');
+		if (excluded(id))
+		{
+			sb.append("excluded ");
+		}
 		if (renderable == null)
 		{
 			sb.append("null");

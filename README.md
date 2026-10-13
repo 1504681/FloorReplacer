@@ -18,9 +18,13 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted. Objects that spawn during a fight (acid pools, shadow markers, mechanics) are left alone. Off limits the plugin to the terrain itself.
 
+**Never paint object IDs** takes floor object IDs, comma separated, that keep their original colours. Akkha's arena floor in Tombs of Amascut (the quadrant platform, outer rings and hourglass tiles) is always left alone because it carries mechanic information.
+
 **Log the tile under you** (off by default) writes what is on each tile you step onto, on every plane of that column, and whether it was painted, to the client log. Turn it on, stand on the floor that stayed unpainted and paste the line into a bug report.
 
 ## Changelog
+
+1.1.5: Akkha's arena floor is never painted; Never paint object IDs setting for other floors you want left alone.
 
 1.1.4: walking-height check for thick floor models read the wrong column of the height map (fixes platforms left unpainted); the debug log now describes every plane of the column you stand in.
 
