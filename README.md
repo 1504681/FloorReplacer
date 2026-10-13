@@ -18,9 +18,11 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted. Objects that spawn during a fight (acid pools, shadow markers, mechanics) are left alone. Off limits the plugin to the terrain itself.
 
-**Log the tile under you** (off by default) writes what is on each tile you step onto, and whether it was painted, to the client log. Turn it on, stand on the floor that stayed unpainted and paste the line into a bug report.
+**Log the tile under you** (off by default) writes what is on each tile you step onto, on every plane of that column, and whether it was painted, to the client log. Turn it on, stand on the floor that stayed unpainted and paste the line into a bug report.
 
 ## Changelog
+
+1.1.4: walking-height check for thick floor models read the wrong column of the height map (fixes platforms left unpainted); the debug log now describes every plane of the column you stand in.
 
 1.1.3: objects spawned during a fight (acid pools, shadow markers) are no longer painted; floor objects are only painted by the scene paint on map load and login, as in 1.0.
 

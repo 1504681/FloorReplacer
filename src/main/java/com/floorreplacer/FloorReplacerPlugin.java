@@ -50,7 +50,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.1.3";
+	static final String VERSION = "1.1.4";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -63,6 +63,9 @@ public class FloorReplacerPlugin extends Plugin
 	// FACE_SLOPE) and lie at a plane's tile height (within HEIGHT_TOLERANCE) are floor: the top you walk on
 	private static final int FACE_SLOPE = 6;
 	private static final int HEIGHT_TOLERANCE = 24;
+	// Scene.getTileHeights() is indexed in extended scene coordinates for the top-level world view, while
+	// Tile.getSceneLocation() is in plain scene coordinates (same convention as the GPU plugin's uploader)
+	private static final int SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2;
 
 	@Inject
 	private Client client;
@@ -333,6 +336,7 @@ public class FloorReplacerPlugin extends Plugin
 		int reference = shade ? averageLuminance(tiles) : 0;
 
 		int[][][] heights = scene.getTileHeights();
+		int offset = heightOffset(scene);
 		int count = 0;
 		for (Tile[][] plane : tiles)
 		{
@@ -344,11 +348,11 @@ public class FloorReplacerPlugin extends Plugin
 					{
 						continue;
 					}
-					count += paintTile(tile, heights, target, shade, reference, objects);
+					count += paintTile(tile, heights, offset, target, shade, reference, objects);
 					Tile bridge = tile.getBridge();
 					if (bridge != null)
 					{
-						count += paintTile(bridge, heights, target, shade, reference, objects);
+						count += paintTile(bridge, heights, offset, target, shade, reference, objects);
 					}
 				}
 			}
@@ -360,7 +364,7 @@ public class FloorReplacerPlugin extends Plugin
 		log.debug("Painted {} floor tiles in world view {}", count, scene.getWorldViewId());
 	}
 
-	private int paintTile(Tile tile, int[][][] heights, int target, boolean shade, int reference, boolean objects)
+	private int paintTile(Tile tile, int[][][] heights, int offset, int target, boolean shade, int reference, boolean objects)
 	{
 		int painted = 0;
 		SceneTilePaint paint = tile.getSceneTilePaint();
@@ -377,7 +381,7 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		if (objects)
 		{
-			int[] levels = walkableHeights(tile, heights);
+			int[] levels = walkableHeights(tile, heights, offset);
 			GroundObject ground = tile.getGroundObject();
 			if (ground != null)
 			{
@@ -398,16 +402,21 @@ public class FloorReplacerPlugin extends Plugin
 		return painted;
 	}
 
+	private static int heightOffset(Scene scene)
+	{
+		return scene.getWorldViewId() == WorldView.TOPLEVEL ? SCENE_OFFSET : 0;
+	}
+
 	/** Tile heights of every plane at this tile's column, or empty when the tile is outside the height map. */
-	private static int[] walkableHeights(Tile tile, int[][][] heights)
+	private static int[] walkableHeights(Tile tile, int[][][] heights, int offset)
 	{
 		Point loc = tile.getSceneLocation();
 		if (heights == null || loc == null)
 		{
 			return new int[0];
 		}
-		int sx = loc.getX();
-		int sy = loc.getY();
+		int sx = loc.getX() + offset;
+		int sy = loc.getY() + offset;
 		int[] out = new int[heights.length];
 		int count = 0;
 		for (int[][] plane : heights)
@@ -707,8 +716,8 @@ public class FloorReplacerPlugin extends Plugin
 	// Tell the GPU plugin (if it is on) to re-upload the whole scene; the software renderer reads the
 	// colours every frame and needs nothing.
 	/**
-	 * Describe the tile the player stands on in the client log: terrain, every object on it and why each was or
-	 * was not painted. For bug reports about floors that stay unpainted.
+	 * Describe the column the player stands in, every plane of it, in the client log: terrain, every object and
+	 * why each was or was not painted. The floor you see is often a lower plane than the one you stand on.
 	 */
 	private void debugTile()
 	{
@@ -730,23 +739,38 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		lastDebugTile = key;
 		Tile[][][] tiles = scene.getTiles();
-		if (tiles == null || plane < 0 || plane >= tiles.length || sx < 0 || sx >= tiles[plane].length
-			|| sy < 0 || sy >= tiles[plane][sx].length || tiles[plane][sx][sy] == null)
+		if (tiles == null || sx < 0 || sy < 0)
 		{
-			log.info("Floor Replacer: no tile at plane {} scene {},{}", plane, sx, sy);
 			return;
 		}
-		Tile tile = tiles[plane][sx][sy];
-		int[] levels = walkableHeights(tile, scene.getTileHeights());
-		StringBuilder sb = new StringBuilder("Floor Replacer: plane ").append(plane)
-			.append(" scene ").append(sx).append(',').append(sy)
-			.append(" region ").append(currentRegion)
-			.append(" painted=").append(painted)
+		int[][][] heights = scene.getTileHeights();
+		int offset = heightOffset(scene);
+		log.info("Floor Replacer: standing on plane {} scene {},{} region {} painted={} v{}", plane, sx, sy, currentRegion, painted, VERSION);
+		for (int z = 0; z < tiles.length; z++)
+		{
+			if (sx >= tiles[z].length || sy >= tiles[z][sx].length || tiles[z][sx][sy] == null)
+			{
+				continue;
+			}
+			Tile tile = tiles[z][sx][sy];
+			describeTile(tile, "plane " + z, heights, offset);
+			if (tile.getBridge() != null)
+			{
+				describeTile(tile.getBridge(), "plane " + z + " bridge", heights, offset);
+			}
+		}
+	}
+
+	private void describeTile(Tile tile, String label, int[][][] heights, int offset)
+	{
+		int[] levels = walkableHeights(tile, heights, offset);
+		StringBuilder sb = new StringBuilder("Floor Replacer:   ").append(label)
 			.append(" heights=").append(Arrays.toString(levels));
 		SceneTilePaint paint = tile.getSceneTilePaint();
 		if (paint != null)
 		{
 			sb.append(" | paint tex=").append(paint.getTexture()).append(" sw=").append(paint.getSwColor())
+				.append(paint.getNeColor() == HIDDEN ? " hidden" : "")
 				.append(originals.containsKey(paint) ? " (painted)" : " (not painted)");
 		}
 		SceneTileModel model = tile.getSceneTileModel();
@@ -780,6 +804,10 @@ public class FloorReplacerPlugin extends Plugin
 			{
 				describe(sb, "decor2", deco.getId(), deco.getRenderable2(), deco.getZ(), levels);
 			}
+		}
+		if (paint == null && model == null && ground == null && gameObjects == null && deco == null)
+		{
+			sb.append(" | empty");
 		}
 		log.info(sb.toString());
 	}
