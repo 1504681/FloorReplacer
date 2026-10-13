@@ -50,7 +50,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.1.6";
+	static final String VERSION = "1.1.7";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -69,6 +69,8 @@ public class FloorReplacerPlugin extends Plugin
 	// floor pieces (gameval ObjectID 45872-46067)
 	private static final int AKKHA_FLOOR_FIRST = 45872;
 	private static final int AKKHA_FLOOR_LAST = 46067;
+	// Chambers of Xeric energy pools (RAIDS_ENERGY_POOL and its glow): flat, but you need to see them
+	private static final Set<Integer> NEVER_PAINT = new HashSet<>(Arrays.asList(30066, 30067));
 	// Scene.getTileHeights() is indexed in extended scene coordinates for the top-level world view, while
 	// Tile.getSceneLocation() is in plain scene coordinates (same convention as the GPU plugin's uploader)
 	private static final int SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2;
@@ -287,7 +289,9 @@ public class FloorReplacerPlugin extends Plugin
 
 	private boolean excluded(int objectId)
 	{
-		return (objectId >= AKKHA_FLOOR_FIRST && objectId <= AKKHA_FLOOR_LAST) || excludedIds.contains(objectId);
+		return (objectId >= AKKHA_FLOOR_FIRST && objectId <= AKKHA_FLOOR_LAST)
+			|| NEVER_PAINT.contains(objectId)
+			|| excludedIds.contains(objectId);
 	}
 
 	private Set<Integer> customRegions()
