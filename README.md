@@ -24,6 +24,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 ## Changelog
 
+1.1.6: low raised slabs and steps (up to 48 units above the tile) count as walking surface, for the rest of the Wardens obelisk platform.
+
 1.1.5: Akkha's arena floor is never painted; Never paint object IDs setting for other floors you want left alone.
 
 1.1.4: walking-height check for thick floor models read the wrong column of the height map (fixes platforms left unpainted); the debug log now describes every plane of the column you stand in.

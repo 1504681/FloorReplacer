@@ -50,7 +50,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.1.5";
+	static final String VERSION = "1.1.6";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -60,9 +60,10 @@ public class FloorReplacerPlugin extends Plugin
 	// Objects no taller than this (in model units; a tile is 128 wide) count as floor: mosaics, rugs, paving, puddles
 	private static final int FLAT_OBJECT_HEIGHT = 24;
 	// For taller objects (arena platforms, docks, bridges) only faces that are level (vertex heights within
-	// FACE_SLOPE) and lie at a plane's tile height (within HEIGHT_TOLERANCE) are floor: the top you walk on
+	// FACE_SLOPE) and lie at a plane's tile height (within HEIGHT_TOLERANCE) are floor: the top you walk on.
+	// 48 units covers low raised slabs and steps (the Wardens obelisk platform) and stays below crate height
 	private static final int FACE_SLOPE = 6;
-	private static final int HEIGHT_TOLERANCE = 24;
+	private static final int HEIGHT_TOLERANCE = 48;
 	// Floor objects that carry mechanic information and must keep their own look. Akkha's arena in Tombs of
 	// Amascut: AKKHA_PLATFORM01-24 (the quadrant floor), AKKHA_ARENA_OUTER_LVL1/LVL2 rings, the hourglass
 	// floor pieces (gameval ObjectID 45872-46067)
