@@ -41,6 +41,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 @Slf4j
 @PluginDescriptor(
@@ -50,7 +51,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.1.9";
+	static final String VERSION = "1.1.10";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -64,6 +65,9 @@ public class FloorReplacerPlugin extends Plugin
 	// 48 units covers low raised slabs and steps (the Wardens obelisk platform) and stays below crate height
 	private static final int FACE_SLOPE = 6;
 	private static final int HEIGHT_TOLERANCE = 48;
+	// A thick model whose footprint is at least 2x2 tiles is a platform, not furniture: its top surface counts
+	// as floor when it sits up to this far above a plane's tile height (a crate or table is 1 tile wide)
+	private static final int PLATFORM_HEIGHT = 128;
 	// Floor objects that carry mechanic information and must keep their own look. Akkha's arena in Tombs of
 	// Amascut: AKKHA_PLATFORM01-24 (the quadrant floor), AKKHA_ARENA_OUTER_LVL1/LVL2 rings, the hourglass
 	// floor pieces (gameval ObjectID 45872-46067)
@@ -88,6 +92,12 @@ public class FloorReplacerPlugin extends Plugin
 	@Inject
 	private FloorReplacerConfig config;
 
+	@Inject
+	private OverlayManager overlayManager;
+
+	@Inject
+	private FloorReplacerOverlay overlay;
+
 	// Original colours of every paint/model we touched, so disabling or changing the colour restores them
 	// without a scene reload. Keyed by identity: the client creates fresh objects for each scene build.
 	private final Map<Object, int[]> originals = new IdentityHashMap<>();
@@ -99,8 +109,9 @@ public class FloorReplacerPlugin extends Plugin
 	private boolean painted;
 	// Object IDs the user never wants painted, parsed from config at each paint pass
 	private Set<Integer> excludedIds = Collections.emptySet();
-	// Tile last written to the debug log, so each tile is described once per visit
+	// Tile last written to the debug log, so each tile is described once per visit, and what was written
 	private int lastDebugTile = -1;
+	private final List<String> debugLines = new ArrayList<>();
 
 	// Luminance clamp (0..127) applied when shading is kept; set from config at the start of each paint pass
 	private int minLum = 0;
@@ -116,12 +127,20 @@ public class FloorReplacerPlugin extends Plugin
 	protected void startUp()
 	{
 		currentRegion = -1;
+		overlayManager.add(overlay);
 		clientThread.invoke(this::evaluate);
+	}
+
+	List<String> debugLines()
+	{
+		return debugLines;
 	}
 
 	@Override
 	protected void shutDown()
 	{
+		overlayManager.remove(overlay);
+		debugLines.clear();
 		clientThread.invoke(this::restoreAll);
 	}
 
@@ -183,6 +202,11 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			restoreAll();
 			evaluate();
+			if (!config.debugLog())
+			{
+				debugLines.clear();
+			}
+			lastDebugTile = -1;
 		});
 	}
 
@@ -412,7 +436,7 @@ public class FloorReplacerPlugin extends Plugin
 			GroundObject ground = tile.getGroundObject();
 			if (ground != null && !excluded(ground.getId()))
 			{
-				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), levels, target, shade, reference);
+				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), levels, false, target, shade, reference);
 			}
 			GameObject[] gameObjects = tile.getGameObjects();
 			if (gameObjects != null)
@@ -421,7 +445,7 @@ public class FloorReplacerPlugin extends Plugin
 				{
 					if (gameObject != null && !excluded(gameObject.getId()))
 					{
-						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), levels, target, shade, reference);
+						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), levels, isWide(gameObject), target, shade, reference);
 					}
 				}
 			}
@@ -432,6 +456,29 @@ public class FloorReplacerPlugin extends Plugin
 	private static int heightOffset(Scene scene)
 	{
 		return scene.getWorldViewId() == WorldView.TOPLEVEL ? SCENE_OFFSET : 0;
+	}
+
+	/** True when the object covers at least 2x2 tiles: a platform or deck rather than a crate or table. */
+	private static boolean isWide(GameObject object)
+	{
+		Point min = object.getSceneMinLocation();
+		Point max = object.getSceneMaxLocation();
+		return min != null && max != null && max.getX() - min.getX() >= 1 && max.getY() - min.getY() >= 1;
+	}
+
+	/** True when a level face at this absolute height counts as floor: at a plane's tile height, or, for a wide
+	 * platform, the top surface sitting up to PLATFORM_HEIGHT above one. */
+	private static boolean isFloorHeight(float absolute, int[] levels, boolean topOfPlatform)
+	{
+		for (int level : levels)
+		{
+			float above = level - absolute; // model Y grows downwards, so a raised top is below the tile height
+			if (Math.abs(above) <= HEIGHT_TOLERANCE || (topOfPlatform && above > 0 && above <= PLATFORM_HEIGHT))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Tile heights of every plane at this tile's column, or empty when the tile is outside the height map. */
@@ -462,7 +509,7 @@ public class FloorReplacerPlugin extends Plugin
 	 * and only those sitting at a plane's tile height: the surface you walk on, not the sides or the underside.
 	 * Animated objects and actors are left alone.
 	 */
-	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, int target, boolean shade, int reference)
+	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, boolean wide, int target, boolean shade, int reference)
 	{
 		if (!(renderable instanceof Model))
 		{
@@ -518,15 +565,12 @@ public class FloorReplacerPlugin extends Plugin
 				{
 					continue;
 				}
-				float absolute = objectZ + (y1 + y2 + y3) / 3f;
-				for (int level : levels)
+				float average = (y1 + y2 + y3) / 3f;
+				boolean top = wide && average - min <= FACE_SLOPE;
+				if (isFloorHeight(objectZ + average, levels, top))
 				{
-					if (Math.abs(absolute - level) <= HEIGHT_TOLERANCE)
-					{
-						mask[i] = true;
-						any = true;
-						break;
-					}
+					mask[i] = true;
+					any = true;
 				}
 			}
 			if (!any)
@@ -743,8 +787,9 @@ public class FloorReplacerPlugin extends Plugin
 	// Tell the GPU plugin (if it is on) to re-upload the whole scene; the software renderer reads the
 	// colours every frame and needs nothing.
 	/**
-	 * Describe the column the player stands in, every plane of it, in the client log: terrain, every object and
-	 * why each was or was not painted. The floor you see is often a lower plane than the one you stand on.
+	 * Describe the column the player stands in, every plane of it, in the client log and on the debug overlay:
+	 * terrain, every object and why each was or was not painted. The floor you see is often a lower plane than
+	 * the one you stand on.
 	 */
 	private void debugTile()
 	{
@@ -772,7 +817,8 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		int[][][] heights = scene.getTileHeights();
 		int offset = heightOffset(scene);
-		log.info("Floor Replacer: standing on plane {} scene {},{} region {} painted={} v{}", plane, sx, sy, currentRegion, painted, VERSION);
+		List<String> lines = new ArrayList<>();
+		lines.add(String.format("v%s standing on plane %d scene %d,%d region %d painted=%b", VERSION, plane, sx, sy, currentRegion, painted));
 		for (int z = 0; z < tiles.length; z++)
 		{
 			if (sx >= tiles[z].length || sy >= tiles[z][sx].length || tiles[z][sx][sy] == null)
@@ -780,23 +826,28 @@ public class FloorReplacerPlugin extends Plugin
 				continue;
 			}
 			Tile tile = tiles[z][sx][sy];
-			describeTile(tile, "plane " + z, heights, offset);
+			describeTile(tile, "plane " + z, heights, offset, lines);
 			if (tile.getBridge() != null)
 			{
-				describeTile(tile.getBridge(), "plane " + z + " bridge", heights, offset);
+				describeTile(tile.getBridge(), "plane " + z + " bridge", heights, offset, lines);
 			}
+		}
+		debugLines.clear();
+		debugLines.addAll(lines);
+		for (String line : lines)
+		{
+			log.info("Floor Replacer: {}", line);
 		}
 	}
 
-	private void describeTile(Tile tile, String label, int[][][] heights, int offset)
+	private void describeTile(Tile tile, String label, int[][][] heights, int offset, List<String> lines)
 	{
 		int[] levels = walkableHeights(tile, heights, offset);
-		StringBuilder sb = new StringBuilder("Floor Replacer:   ").append(label)
-			.append(" heights=").append(Arrays.toString(levels));
+		StringBuilder sb = new StringBuilder(label).append(" heights=").append(Arrays.toString(levels));
 		SceneTilePaint paint = tile.getSceneTilePaint();
 		if (paint != null)
 		{
-			sb.append(" | paint tex=").append(paint.getTexture()).append(" sw=").append(paint.getSwColor())
+			sb.append(" paint tex=").append(paint.getTexture())
 				.append(paint.getNeColor() == HIDDEN ? " hidden" : "")
 				.append(originals.containsKey(paint) ? " (painted)" : " (not painted)");
 		}
@@ -804,13 +855,18 @@ public class FloorReplacerPlugin extends Plugin
 		if (model != null)
 		{
 			int[] a = model.getTriangleColorA();
-			sb.append(" | tile model tris=").append(a != null ? a.length : -1)
+			sb.append(" tile model tris=").append(a != null ? a.length : -1)
 				.append(originals.containsKey(model) ? " (painted)" : " (not painted)");
 		}
+		if (paint == null && model == null)
+		{
+			sb.append(" no terrain");
+		}
+		lines.add(sb.toString());
 		GroundObject ground = tile.getGroundObject();
 		if (ground != null)
 		{
-			describe(sb, "ground", ground.getId(), ground.getRenderable(), ground.getZ(), levels);
+			lines.add(describe("ground", ground.getId(), ground.getRenderable(), ground.getZ(), levels, false, "1x1"));
 		}
 		GameObject[] gameObjects = tile.getGameObjects();
 		if (gameObjects != null)
@@ -819,42 +875,40 @@ public class FloorReplacerPlugin extends Plugin
 			{
 				if (gameObject != null)
 				{
-					describe(sb, "object", gameObject.getId(), gameObject.getRenderable(), gameObject.getZ(), levels);
+					Point min = gameObject.getSceneMinLocation();
+					Point max = gameObject.getSceneMaxLocation();
+					String size = min != null && max != null
+						? (max.getX() - min.getX() + 1) + "x" + (max.getY() - min.getY() + 1)
+						: "?";
+					lines.add(describe("object", gameObject.getId(), gameObject.getRenderable(), gameObject.getZ(), levels, isWide(gameObject), size));
 				}
 			}
 		}
 		DecorativeObject deco = tile.getDecorativeObject();
 		if (deco != null)
 		{
-			describe(sb, "decor", deco.getId(), deco.getRenderable(), deco.getZ(), levels);
+			lines.add(describe("decor", deco.getId(), deco.getRenderable(), deco.getZ(), levels, false, "1x1"));
 			if (deco.getRenderable2() != null)
 			{
-				describe(sb, "decor2", deco.getId(), deco.getRenderable2(), deco.getZ(), levels);
+				lines.add(describe("decor2", deco.getId(), deco.getRenderable2(), deco.getZ(), levels, false, "1x1"));
 			}
 		}
-		if (paint == null && model == null && ground == null && gameObjects == null && deco == null)
-		{
-			sb.append(" | empty");
-		}
-		log.info(sb.toString());
 	}
 
-	private void describe(StringBuilder sb, String kind, int id, Renderable renderable, int objectZ, int[] levels)
+	private String describe(String kind, int id, Renderable renderable, int objectZ, int[] levels, boolean wide, String size)
 	{
-		sb.append(" | ").append(kind).append(' ').append(id).append(' ');
+		StringBuilder sb = new StringBuilder("  ").append(kind).append(' ').append(id).append(' ').append(size).append(' ');
 		if (excluded(id))
 		{
 			sb.append("excluded ");
 		}
 		if (renderable == null)
 		{
-			sb.append("null");
-			return;
+			return sb.append("null").toString();
 		}
 		if (!(renderable instanceof Model))
 		{
-			sb.append(renderable instanceof DynamicObject ? "animated (skipped)" : renderable.getClass().getSimpleName());
-			return;
+			return sb.append(renderable instanceof DynamicObject ? "animated (skipped)" : renderable.getClass().getSimpleName()).toString();
 		}
 		Model model = (Model) renderable;
 		float[] ys = model.getVerticesY();
@@ -864,8 +918,7 @@ public class FloorReplacerPlugin extends Plugin
 		int n = model.getFaceCount();
 		if (ys == null || f1 == null || f2 == null || f3 == null)
 		{
-			sb.append("model without geometry");
-			return;
+			return sb.append("model without geometry").toString();
 		}
 		int vertices = Math.min(model.getVerticesCount(), ys.length);
 		float min = Float.MAX_VALUE;
@@ -876,7 +929,7 @@ public class FloorReplacerPlugin extends Plugin
 			max = Math.max(max, ys[i]);
 		}
 		int level = 0;
-		int atFloor = 0;
+		int floor = 0;
 		float nearest = Float.MAX_VALUE;
 		for (int i = 0; i < n; i++)
 		{
@@ -892,24 +945,21 @@ public class FloorReplacerPlugin extends Plugin
 				continue;
 			}
 			level++;
-			float absolute = objectZ + (y1 + y2 + y3) / 3f;
+			float average = (y1 + y2 + y3) / 3f;
+			float absolute = objectZ + average;
 			for (int h : levels)
 			{
-				float diff = Math.abs(absolute - h);
-				nearest = Math.min(nearest, diff);
+				nearest = Math.min(nearest, Math.abs(absolute - h));
 			}
-			for (int h : levels)
+			if (isFloorHeight(absolute, levels, wide && average - min <= FACE_SLOPE))
 			{
-				if (Math.abs(absolute - h) <= HEIGHT_TOLERANCE)
-				{
-					atFloor++;
-					break;
-				}
+				floor++;
 			}
 		}
-		sb.append(String.format("model faces=%d levelFaces=%d atFloor=%d y=%.0f..%.0f z=%d nearest=%s textured=%b %s",
-			n, level, atFloor, min, max, objectZ, nearest == Float.MAX_VALUE ? "-" : String.format("%.0f", nearest),
+		sb.append(String.format("faces=%d level=%d floor=%d y=%.0f..%.0f z=%d nearest=%s tex=%b %s",
+			n, level, floor, min, max, objectZ, nearest == Float.MAX_VALUE ? "-" : String.format("%.0f", nearest),
 			model.getFaceTextures() != null, originals.containsKey(model) ? "(painted)" : "(not painted)"));
+		return sb.toString();
 	}
 
 	private void invalidate(Scene scene)
