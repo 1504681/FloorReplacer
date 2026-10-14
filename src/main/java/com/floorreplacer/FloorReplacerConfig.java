@@ -51,7 +51,7 @@ public interface FloorReplacerConfig extends Config
 	)
 	default Color color()
 	{
-		return new Color(0x64, 0x87, 0x8D);
+		return Color.WHITE;
 	}
 
 	@Range(min = 0, max = 100)
@@ -64,7 +64,7 @@ public interface FloorReplacerConfig extends Config
 	)
 	default int strength()
 	{
-		return 100;
+		return 20;
 	}
 
 	@ConfigItem(

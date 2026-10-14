@@ -10,9 +10,9 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Where** is Everywhere by default. Set it to Selected areas only and the floor is painted just in the areas ticked under Areas: each Theatre of Blood room, each Tombs of Amascut boss (with its puzzle room), Chambers of Xeric, Inferno, Fight Cave, Fortis Colosseum, Doom of Mokhaiotl, Nex, Nightmare and Yama, all on by default. **Custom region IDs** takes extra map regions, comma separated, for anywhere else. The floor switches back to normal the moment you leave a selected area.
 
-**Floor colour** is the colour every tile gets. Default is a muted slate blue (#64878D).
+**Floor colour** is the colour every tile gets. Default is white (#FFFFFF).
 
-**Strength** (100% by default) is how much of that colour goes on. At 100% the floor is replaced outright. Lower values lay the colour over the floor like a translucent layer, so the ground keeps its own look underneath, softened and tinted.
+**Strength** (20% by default) is how much of that colour goes on. At 100% the floor is replaced outright. Lower values lay the colour over the floor like a translucent layer, so the ground keeps its own look underneath, softened and tinted.
 
 **Keep shading** (on by default) keeps each tile's light and dark variation relative to the average floor brightness, so hills, slopes and paths are still readable in the new colour. Turn it off for one perfectly flat colour with no shading at all.
 
@@ -25,6 +25,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 **Show the tile under the mouse** (off by default) shows an overlay, and writes to the client log, what is on the tile under the mouse (or under you when the mouse is off the scene), on every plane of that column, whether it is walkable and whether it was painted. Turn it on, hover the floor or wall that looks wrong and screenshot it for a bug report.
 
 ## Changelog
+
+1.2.4: defaults are now white at 20% Strength, a soft brightening wash; set Strength to 100% for the old solid replacement.
 
 1.2.3: flat floor objects must rest at a plane's tile height (Chambers of Xeric wall caps are flat but a storey up); the cave walls and wall tops there are never painted; the debug overlay describes the tile under the mouse.
 

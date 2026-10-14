@@ -7,6 +7,9 @@
   "description": "Paints every floor tile in the scene a single colour of your choice",
   "tags": [
     "floor",
+    "Floor Painter",
+    "painter",
+    "paint",
     "ground",
     "colour",
     "color",
@@ -20,5 +23,5 @@
     "flat",
     "visibility"
   ],
-  "version": "1.2.3"
+  "version": "1.2.4"
 }
