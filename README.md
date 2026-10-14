@@ -12,9 +12,13 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Floor colour** is the colour every tile gets. Default is a muted slate blue (#64878D).
 
+**Strength** (100% by default) is how far each tile moves towards that colour. At 100% the floor is replaced outright. Lower values keep part of the floor's own look while flattening its variation and shifting its tone, for a softer, more uniform ground instead of a flat one.
+
 **Keep shading** (on by default) keeps each tile's light and dark variation relative to the average floor brightness, so hills, slopes and paths are still readable in the new colour. Turn it off for one perfectly flat colour with no shading at all.
 
 **Min brightness** and **Max brightness** (20% and 50% by default) clamp the shaded result, so a sunlit plateau can't wash out to near white and a shadowed dungeon can't go near black. They only apply while Keep shading is on. 0% and 100% mean no limit.
+
+**Skip walls and cliffs** (on by default) leaves steep terrain alone: cave walls and cliff faces that are really just very steep ground, such as the room walls in Chambers of Xeric, keep their own look.
 
 **Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted, plus the top surface of wide platforms (2x2 tiles or more) that sit up to a tile above the floor. Objects that spawn during a fight (acid pools, shadow markers, mechanics) are left alone. Off limits the plugin to the terrain itself.
 
@@ -23,6 +27,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 **Show the tile under you** (off by default) shows an overlay, and writes to the client log, what is on each tile you step onto, on every plane of that column, and whether it was painted. Turn it on, stand on the floor that stayed unpainted and screenshot it for a bug report.
 
 ## Changelog
+
+1.2.0: Strength setting to soften the floor instead of replacing it; steep terrain (cave walls, cliffs) is skipped by default.
 
 1.1.11: Chambers of Xeric tool spawns (tinderbox, bronze axe, pickaxe, hammer) are never painted.
 

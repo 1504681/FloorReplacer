@@ -51,7 +51,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.1.11";
+	static final String VERSION = "1.2.0";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -68,6 +68,8 @@ public class FloorReplacerPlugin extends Plugin
 	// A thick model whose footprint is at least 2x2 tiles is a platform, not furniture: its top surface counts
 	// as floor when it sits up to this far above a plane's tile height (a crate or table is 1 tile wide)
 	private static final int PLATFORM_HEIGHT = 128;
+	// Terrain whose corners differ by more than this across one tile is a cave wall or cliff, not a floor
+	private static final int STEEP_TERRAIN = 96;
 	// Floor objects that carry mechanic information and must keep their own look. Akkha's arena in Tombs of
 	// Amascut: AKKHA_PLATFORM01-24 (the quadrant floor), AKKHA_ARENA_OUTER_LVL1/LVL2 rings, the hourglass
 	// floor pieces (gameval ObjectID 45872-46067)
@@ -115,6 +117,8 @@ public class FloorReplacerPlugin extends Plugin
 	private final List<String> debugLines = new ArrayList<>();
 
 	// Luminance clamp (0..127) applied when shading is kept; set from config at the start of each paint pass
+	// How far each vertex colour moves towards the target: 100 replaces it, less keeps part of the original look
+	private int strength = 100;
 	private int minLum = 0;
 	private int maxLum = JagexColor.LUMINANCE_MAX;
 
@@ -378,6 +382,8 @@ public class FloorReplacerPlugin extends Plugin
 		int target = JagexColor.rgbToHSL(config.color().getRGB() & 0xFFFFFF, brightness) & 0xFFFF;
 		boolean shade = config.keepShading();
 		boolean objects = config.floorObjects();
+		boolean skipSteep = config.skipSteep();
+		strength = Math.max(0, Math.min(100, config.strength()));
 		minLum = JagexColor.LUMINANCE_MAX * Math.max(0, Math.min(100, config.minBrightness())) / 100;
 		maxLum = JagexColor.LUMINANCE_MAX * Math.max(0, Math.min(100, config.maxBrightness())) / 100;
 		if (maxLum < minLum)
@@ -400,11 +406,11 @@ public class FloorReplacerPlugin extends Plugin
 					{
 						continue;
 					}
-					count += paintTile(tile, heights, offset, target, shade, reference, objects);
+					count += paintTile(tile, heights, offset, target, shade, reference, objects, skipSteep);
 					Tile bridge = tile.getBridge();
 					if (bridge != null)
 					{
-						count += paintTile(bridge, heights, offset, target, shade, reference, objects);
+						count += paintTile(bridge, heights, offset, target, shade, reference, objects, skipSteep);
 					}
 				}
 			}
@@ -416,11 +422,11 @@ public class FloorReplacerPlugin extends Plugin
 		log.debug("Painted {} floor tiles in world view {}", count, scene.getWorldViewId());
 	}
 
-	private int paintTile(Tile tile, int[][][] heights, int offset, int target, boolean shade, int reference, boolean objects)
+	private int paintTile(Tile tile, int[][][] heights, int offset, int target, boolean shade, int reference, boolean objects, boolean skipSteep)
 	{
 		int painted = 0;
 		SceneTilePaint paint = tile.getSceneTilePaint();
-		if (paint != null)
+		if (paint != null && !(skipSteep && steepPaint(tile, heights, offset)))
 		{
 			paintPaint(paint, target, shade, reference);
 			painted++;
@@ -428,7 +434,7 @@ public class FloorReplacerPlugin extends Plugin
 		SceneTileModel model = tile.getSceneTileModel();
 		if (model != null)
 		{
-			paintModel(model, target, shade, reference);
+			paintModel(model, skipSteep, target, shade, reference);
 			painted++;
 		}
 		if (objects)
@@ -457,6 +463,32 @@ public class FloorReplacerPlugin extends Plugin
 	private static int heightOffset(Scene scene)
 	{
 		return scene.getWorldViewId() == WorldView.TOPLEVEL ? SCENE_OFFSET : 0;
+	}
+
+	/** True when the four corners of a flat-painted tile differ by more than a wall's worth of height. */
+	private static boolean steepPaint(Tile tile, int[][][] heights, int offset)
+	{
+		Point loc = tile.getSceneLocation();
+		int z = tile.getRenderLevel();
+		if (heights == null || loc == null || z < 0 || z >= heights.length || heights[z] == null)
+		{
+			return false;
+		}
+		int[][] plane = heights[z];
+		int x = loc.getX() + offset;
+		int y = loc.getY() + offset;
+		if (x < 0 || y < 0 || x + 1 >= plane.length || plane[x] == null || plane[x + 1] == null
+			|| y + 1 >= plane[x].length || y + 1 >= plane[x + 1].length)
+		{
+			return false;
+		}
+		int sw = plane[x][y];
+		int se = plane[x + 1][y];
+		int ne = plane[x + 1][y + 1];
+		int nw = plane[x][y + 1];
+		int hi = Math.max(Math.max(sw, se), Math.max(ne, nw));
+		int lo = Math.min(Math.min(sw, se), Math.min(ne, nw));
+		return hi - lo > STEEP_TERRAIN;
 	}
 
 	/** True when the object covers at least 2x2 tiles: a platform or deck rather than a crate or table. */
@@ -632,7 +664,7 @@ public class FloorReplacerPlugin extends Plugin
 		paint.setTexture(-1);
 	}
 
-	private void paintModel(SceneTileModel model, int target, boolean shade, int reference)
+	private void paintModel(SceneTileModel model, boolean skipSteep, int target, boolean shade, int reference)
 	{
 		int[] a = model.getTriangleColorA();
 		int[] b = model.getTriangleColorB();
@@ -643,6 +675,11 @@ public class FloorReplacerPlugin extends Plugin
 			return;
 		}
 		int n = a.length;
+		int[] vy = model.getVertexY();
+		int[] fx = model.getFaceX();
+		int[] fy = model.getFaceY();
+		int[] fz = model.getFaceZ();
+		boolean slopes = skipSteep && vy != null && fx != null && fy != null && fz != null;
 		if (!originals.containsKey(model))
 		{
 			int[] copy = new int[tex != null ? 4 * n : 3 * n];
@@ -658,6 +695,25 @@ public class FloorReplacerPlugin extends Plugin
 		int[] orig = originals.get(model);
 		for (int i = 0; i < n; i++)
 		{
+			if (slopes && i < fx.length && i < fy.length && i < fz.length
+				&& fx[i] < vy.length && fy[i] < vy.length && fz[i] < vy.length)
+			{
+				int y1 = vy[fx[i]];
+				int y2 = vy[fy[i]];
+				int y3 = vy[fz[i]];
+				if (Math.max(y1, Math.max(y2, y3)) - Math.min(y1, Math.min(y2, y3)) > STEEP_TERRAIN)
+				{
+					// wall or cliff face: keep its own look
+					a[i] = orig[i];
+					b[i] = orig[n + i];
+					c[i] = orig[2 * n + i];
+					if (tex != null && orig.length == 4 * n)
+					{
+						tex[i] = orig[3 * n + i];
+					}
+					continue;
+				}
+			}
 			a[i] = recolor(orig[i], target, shade, reference);
 			b[i] = recolor(orig[n + i], target, shade, reference);
 			c[i] = recolor(orig[2 * n + i], target, shade, reference);
@@ -679,16 +735,31 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			return original;
 		}
-		if (!shade)
+		int hue = JagexColor.unpackHue((short) target);
+		int sat = JagexColor.unpackSaturation((short) target);
+		int lum = JagexColor.unpackLuminance((short) target);
+		if (shade)
 		{
-			return target;
+			lum += JagexColor.unpackLuminance((short) original) - reference;
 		}
-		int lum = JagexColor.unpackLuminance((short) target) + (JagexColor.unpackLuminance((short) original) - reference);
+		if (strength < 100)
+		{
+			// Partial strength: move the original colour part of the way, so the floor keeps some of its own look
+			// while its variation shrinks and its tone shifts towards the chosen colour
+			hue = lerpHue(JagexColor.unpackHue((short) original), hue, strength);
+			sat = Math.round(JagexColor.unpackSaturation((short) original) + (sat - JagexColor.unpackSaturation((short) original)) * strength / 100f);
+			lum = Math.round(JagexColor.unpackLuminance((short) original) + (lum - JagexColor.unpackLuminance((short) original)) * strength / 100f);
+		}
 		lum = Math.max(minLum, Math.min(maxLum, lum));
-		return JagexColor.packHSL(
-			JagexColor.unpackHue((short) target),
-			JagexColor.unpackSaturation((short) target),
-			lum) & 0xFFFF;
+		return JagexColor.packHSL(hue, sat, lum) & 0xFFFF;
+	}
+
+	/** Hue is circular (0..HUE_MAX): interpolate the short way round. */
+	private static int lerpHue(int from, int to, int percent)
+	{
+		int range = JagexColor.HUE_MAX + 1;
+		int diff = ((to - from) % range + range + range / 2) % range - range / 2;
+		return ((from + Math.round(diff * percent / 100f)) % range + range) % range;
 	}
 
 	private int averageLuminance(Tile[][][] tiles)
@@ -850,6 +921,7 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			sb.append(" paint tex=").append(paint.getTexture())
 				.append(paint.getNeColor() == HIDDEN ? " hidden" : "")
+				.append(steepPaint(tile, heights, offset) ? " steep" : "")
 				.append(originals.containsKey(paint) ? " (painted)" : " (not painted)");
 		}
 		SceneTileModel model = tile.getSceneTileModel();
