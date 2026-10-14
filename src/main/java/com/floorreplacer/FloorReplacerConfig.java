@@ -239,7 +239,7 @@ public interface FloorReplacerConfig extends Config
 	@ConfigItem(
 		keyName = "excludedObjects",
 		name = "Never paint object IDs",
-		description = "Floor object IDs to leave in their original colours, comma separated. Akkha's arena floor in Tombs of Amascut and the Chambers of Xeric energy pools, herb patches and floor holes are always left alone.",
+		description = "Floor object IDs to leave in their original colours, comma separated. Akkha's arena floor in Tombs of Amascut and the Chambers of Xeric energy pools, herb patches, floor holes and tool spawns are always left alone.",
 		position = 51
 	)
 	default String excludedObjects()

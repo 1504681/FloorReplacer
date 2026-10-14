@@ -51,7 +51,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.1.10";
+	static final String VERSION = "1.1.11";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -75,9 +75,10 @@ public class FloorReplacerPlugin extends Plugin
 	private static final int AKKHA_FLOOR_LAST = 46067;
 	// Chambers of Xeric energy pools (RAIDS_ENERGY_POOL and its glow) and herb patches (RAIDS_PATCH_EMPTY,
 	// RAIDS_PATCH_GROUNDDECOR, RAIDS_PATCH_* seed/growth/fully grown) and the holes down to the next floor
-	// (RAIDS_DESCENTTO1/2): flat, but you need to see them
+	// (RAIDS_DESCENTTO1/2) and the tool spawns (RAIDS_ICEDEMON_TINDERBOX/AXE, RAIDS_STONEGUARDIANS_PICKAXE,
+	// RAIDS_LASERCRABS_HAMMER): flat, but you need to see them
 	private static final Set<Integer> NEVER_PAINT = new HashSet<>(Arrays.asList(
-		30066, 30067, 32542, 29734,
+		30066, 30067, 32542, 29734, 31634, 31862, 41754, 29711,
 		29765, 29877, 29997, 29998, 29999, 30000, 30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009, 30010, 30011));
 	// Scene.getTileHeights() is indexed in extended scene coordinates for the top-level world view, while
 	// Tile.getSceneLocation() is in plain scene coordinates (same convention as the GPU plugin's uploader)

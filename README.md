@@ -18,11 +18,13 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted, plus the top surface of wide platforms (2x2 tiles or more) that sit up to a tile above the floor. Objects that spawn during a fight (acid pools, shadow markers, mechanics) are left alone. Off limits the plugin to the terrain itself.
 
-**Never paint object IDs** takes floor object IDs, comma separated, that keep their original colours. Akkha's arena floor in Tombs of Amascut (the quadrant platform, outer rings and hourglass tiles) and the energy pools, herb patches and floor holes in Chambers of Xeric are always left alone because you need to see them.
+**Never paint object IDs** takes floor object IDs, comma separated, that keep their original colours. Akkha's arena floor in Tombs of Amascut (the quadrant platform, outer rings and hourglass tiles) and the energy pools, herb patches, floor holes and tool spawns (tinderbox, axe, pickaxe, hammer) in Chambers of Xeric are always left alone because you need to see them.
 
 **Show the tile under you** (off by default) shows an overlay, and writes to the client log, what is on each tile you step onto, on every plane of that column, and whether it was painted. Turn it on, stand on the floor that stayed unpainted and screenshot it for a bug report.
 
 ## Changelog
+
+1.1.11: Chambers of Xeric tool spawns (tinderbox, bronze axe, pickaxe, hammer) are never painted.
 
 1.1.10: tops of wide raised platforms (2x2 tiles or more, up to a tile above the floor) are painted; the tile debug view is also an on-screen overlay.
 
