@@ -26,6 +26,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 ## Changelog
 
+1.2.8: scenes of sub world views (moving platforms, the Wardens phase 3 arena) are painted and re-uploaded with the right zone count; the debug overlay names the world view and reports its own errors.
+
 1.2.7: the Wardens phase 3 arena floor is painted wherever it floats; its pieces are floor by name and skip the height rules that 1.2.3 added for flat objects.
 
 1.2.6: the Wardens phase 3 arena floor in Tombs of Amascut, which the server lays down mid-fight, is painted as it appears (an allowlist of its floor pieces; other mid-fight spawns stay untouched).

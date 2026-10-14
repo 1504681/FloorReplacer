@@ -30,6 +30,7 @@ import net.runelite.api.SceneTileModel;
 import net.runelite.api.SceneTilePaint;
 import net.runelite.api.TextureProvider;
 import net.runelite.api.Tile;
+import net.runelite.api.WorldEntity;
 import net.runelite.api.WorldView;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
@@ -39,6 +40,7 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GroundObjectSpawned;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.WorldViewLoaded;
+import net.runelite.api.events.WorldViewUnloaded;
 import net.runelite.api.hooks.DrawCallbacks;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -56,7 +58,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.7";
+	static final String VERSION = "1.2.8";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -219,6 +221,16 @@ public class FloorReplacerPlugin extends Plugin
 		}
 	}
 
+	@Subscribe
+	public void onWorldViewUnloaded(WorldViewUnloaded event)
+	{
+		Scene scene = event.getWorldView() != null ? event.getWorldView().getScene() : null;
+		if (scene != null)
+		{
+			paintedScenes.remove(scene);
+		}
+	}
+
 	// Objects that spawn later (acid pools, shadow markers, arena mechanics) are deliberately left alone: they
 	// are gameplay, not floor. Only the scene paint passes (map load, login) touch floor objects, with one
 	// exception: the KNOWN_FLOOR allowlist, floors the server lays down mid-fight.
@@ -251,11 +263,16 @@ public class FloorReplacerPlugin extends Plugin
 
 	private void paintSpawn(Tile tile, Renderable renderable, int objectZ, boolean wide, int footprint)
 	{
-		WorldView view = client.getTopLevelWorldView();
+		Player local = client.getLocalPlayer();
+		WorldView view = local != null ? local.getWorldView() : client.getTopLevelWorldView();
 		Scene scene = view != null ? view.getScene() : null;
 		if (tile == null || scene == null)
 		{
 			return;
+		}
+		if (!paintedScenes.contains(scene))
+		{
+			paintedScenes.add(scene);
 		}
 		int offset = heightOffset(scene);
 		int[] levels = walkableHeights(tile, scene.getTileHeights(), offset, wide);
@@ -284,7 +301,16 @@ public class FloorReplacerPlugin extends Plugin
 		evaluate();
 		if (config.debugLog())
 		{
-			debugTile();
+			try
+			{
+				debugTile();
+			}
+			catch (RuntimeException e)
+			{
+				debugLines.clear();
+				debugLines.add("v" + VERSION + " debug failed: " + e);
+				log.warn("Floor Replacer: debug failed", e);
+			}
 		}
 	}
 
@@ -451,9 +477,19 @@ public class FloorReplacerPlugin extends Plugin
 			return;
 		}
 		WorldView top = client.getTopLevelWorldView();
-		if (top != null)
+		if (top == null)
 		{
-			paintScene(top.getScene());
+			return;
+		}
+		paintScene(top.getScene());
+		// Sub world views: moving platforms and the like carry their own scene (the Wardens phase 3 arena)
+		for (WorldEntity entity : top.worldEntities())
+		{
+			WorldView sub = entity != null ? entity.getWorldView() : null;
+			if (sub != null)
+			{
+				paintScene(sub.getScene());
+			}
 		}
 	}
 
@@ -1114,7 +1150,9 @@ public class FloorReplacerPlugin extends Plugin
 		int[][][] heights = scene.getTileHeights();
 		int offset = heightOffset(scene);
 		List<String> lines = new ArrayList<>();
-		lines.add(String.format("v%s %s plane %d scene %d,%d region %d painted=%b", VERSION, where, plane, sx, sy, currentRegion, painted));
+		lines.add(String.format("v%s %s plane %d scene %d,%d region %d view %s painted=%b (scene %s)", VERSION, where, plane, sx, sy, currentRegion,
+			view.isTopLevel() ? "top" : "sub " + view.getId() + " " + view.getSizeX() + "x" + view.getSizeY(), painted,
+			paintedScenes.contains(scene) ? "painted" : "not painted"));
 		CollisionData[] collision = view.getCollisionMaps();
 		for (int z = 0; z < tiles.length; z++)
 		{
@@ -1304,12 +1342,33 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			return;
 		}
-		for (int x = 0; x < ZONES; x++)
+		// The GPU plugin keeps ZONES x ZONES zones for the top-level scene but only size/8 for a sub world view;
+		// asking for a zone it does not have throws and the scene never gets re-uploaded
+		int zonesX = ZONES;
+		int zonesY = ZONES;
+		if (scene.getWorldViewId() != WorldView.TOPLEVEL)
 		{
-			for (int y = 0; y < ZONES; y++)
+			WorldView view = client.getWorldView(scene.getWorldViewId());
+			if (view == null)
 			{
-				callbacks.invalidateZone(scene, x, y);
+				return;
 			}
+			zonesX = view.getSizeX() >> 3;
+			zonesY = view.getSizeY() >> 3;
+		}
+		try
+		{
+			for (int x = 0; x < zonesX; x++)
+			{
+				for (int y = 0; y < zonesY; y++)
+				{
+					callbacks.invalidateZone(scene, x, y);
+				}
+			}
+		}
+		catch (RuntimeException e)
+		{
+			log.warn("Floor Replacer: could not invalidate world view {} ({}x{} zones)", scene.getWorldViewId(), zonesX, zonesY, e);
 		}
 	}
 }
