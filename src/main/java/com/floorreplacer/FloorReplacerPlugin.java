@@ -56,7 +56,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.6";
+	static final String VERSION = "1.2.7";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -92,15 +92,16 @@ public class FloorReplacerPlugin extends Plugin
 		30066, 30067, 32542, 29734, 31634, 31862, 41754, 29711,
 		29765, 29877, 29997, 29998, 29999, 30000, 30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009, 30010, 30011,
 		29781, 29782, 29783, 29784, 29785, 29786, 29787, 29788));
-	// The only objects painted when they SPAWN, because they are a floor that the server lays down mid-fight:
-	// the Tombs of Amascut Wardens phase 3 arena (TOA_WARDENS_WARPED_FLOORTILE*, _WARPED_LVL0_01-71,
+	// Objects that are floor by name, so the height rules do not apply (their level faces are painted wherever
+	// they sit) and they are painted even when they SPAWN mid-fight: the Tombs of Amascut Wardens phase 3
+	// arena, which floats over the void (TOA_WARDENS_WARPED_FLOORTILE*, _WARPED_LVL0_01-71,
 	// _WARPED_OUTSIDE_CRUMBLE*, _P3_BROKENTILE*). Everything else that spawns during a fight is a mechanic
-	private static final Set<Integer> FLOOR_ON_SPAWN = new HashSet<>();
+	private static final Set<Integer> KNOWN_FLOOR = new HashSet<>();
 	static
 	{
 		for (int id = 45643; id <= 45738; id++)
 		{
-			FLOOR_ON_SPAWN.add(id);
+			KNOWN_FLOOR.add(id);
 		}
 	}
 	// Scene.getTileHeights() is indexed in extended scene coordinates for the top-level world view, while
@@ -220,7 +221,7 @@ public class FloorReplacerPlugin extends Plugin
 
 	// Objects that spawn later (acid pools, shadow markers, arena mechanics) are deliberately left alone: they
 	// are gameplay, not floor. Only the scene paint passes (map load, login) touch floor objects, with one
-	// exception: the FLOOR_ON_SPAWN allowlist, floors the server lays down mid-fight.
+	// exception: the KNOWN_FLOOR allowlist, floors the server lays down mid-fight.
 
 	@Subscribe
 	public void onGameObjectSpawned(GameObjectSpawned event)
@@ -245,7 +246,7 @@ public class FloorReplacerPlugin extends Plugin
 
 	private boolean spawnIsFloor(int id)
 	{
-		return painted && config.floorObjects() && FLOOR_ON_SPAWN.contains(id) && !excluded(id);
+		return painted && config.floorObjects() && KNOWN_FLOOR.contains(id) && !excluded(id);
 	}
 
 	private void paintSpawn(Tile tile, Renderable renderable, int objectZ, boolean wide, int footprint)
@@ -258,7 +259,7 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		int offset = heightOffset(scene);
 		int[] levels = walkableHeights(tile, scene.getTileHeights(), offset, wide);
-		if (paintFloorObject(renderable, objectZ, levels, wide, footprint, paintTarget, paintShade, paintReference) > 0)
+		if (paintFloorObject(renderable, objectZ, levels, wide, footprint, true, paintTarget, paintShade, paintReference) > 0)
 		{
 			dirty = true;
 		}
@@ -549,7 +550,7 @@ public class FloorReplacerPlugin extends Plugin
 			GroundObject ground = tile.getGroundObject();
 			if (ground != null && !excluded(ground.getId()))
 			{
-				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), own, false, 1, target, shade, reference);
+				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), own, false, 1, KNOWN_FLOOR.contains(ground.getId()), target, shade, reference);
 			}
 			GameObject[] gameObjects = tile.getGameObjects();
 			if (gameObjects != null)
@@ -559,7 +560,7 @@ public class FloorReplacerPlugin extends Plugin
 					if (gameObject != null && !excluded(gameObject.getId()))
 					{
 						boolean wide = isWide(gameObject);
-						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), wide ? all : own, wide, footprint(gameObject), target, shade, reference);
+						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), wide ? all : own, wide, footprint(gameObject), KNOWN_FLOOR.contains(gameObject.getId()), target, shade, reference);
 					}
 				}
 			}
@@ -696,7 +697,7 @@ public class FloorReplacerPlugin extends Plugin
 	 * and only those sitting at a plane's tile height: the surface you walk on, not the sides or the underside.
 	 * Animated objects and actors are left alone.
 	 */
-	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, boolean wide, int footprint, int target, boolean shade, int reference)
+	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, boolean wide, int footprint, boolean known, int target, boolean shade, int reference)
 	{
 		Model model = modelOf(renderable);
 		if (model == null)
@@ -728,7 +729,7 @@ public class FloorReplacerPlugin extends Plugin
 			max = Math.max(max, ys[i]);
 		}
 
-		if (levels.length == 0)
+		if (levels.length == 0 && !known)
 		{
 			return 0;
 		}
@@ -736,8 +737,8 @@ public class FloorReplacerPlugin extends Plugin
 		if (max - min <= FLAT_OBJECT_HEIGHT)
 		{
 			// A flat model is only floor when it rests on one. Cave wall caps, roof slabs and ledges are flat
-			// too, but they hang a storey above the tile height
-			if (!isFloorHeight(objectZ + max, levels, false))
+			// too, but they hang a storey above the tile height. A known floor may float wherever it likes
+			if (!known && !isFloorHeight(objectZ + max, levels, false))
 			{
 				return 0;
 			}
@@ -763,13 +764,13 @@ public class FloorReplacerPlugin extends Plugin
 				}
 				float average = (y1 + y2 + y3) / 3f;
 				boolean top = wide && average - min <= FACE_SLOPE;
-				if (isFloorHeight(objectZ + average, levels, top))
+				if (known || isFloorHeight(objectZ + average, levels, top))
 				{
 					mask[i] = true;
 					any = true;
 				}
 			}
-			if (!any || coverage(model, mask, footprint) < MIN_COVERAGE)
+			if (!any || (!known && coverage(model, mask, footprint) < MIN_COVERAGE))
 			{
 				// a few level facets on a rock face or wall base are not a floor
 				return 0;
@@ -1224,6 +1225,10 @@ public class FloorReplacerPlugin extends Plugin
 		if (excluded(id))
 		{
 			sb.append("excluded ");
+		}
+		if (KNOWN_FLOOR.contains(id))
+		{
+			sb.append("known-floor ");
 		}
 		if (renderable == null)
 		{

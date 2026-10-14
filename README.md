@@ -26,6 +26,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 ## Changelog
 
+1.2.7: the Wardens phase 3 arena floor is painted wherever it floats; its pieces are floor by name and skip the height rules that 1.2.3 added for flat objects.
+
 1.2.6: the Wardens phase 3 arena floor in Tombs of Amascut, which the server lays down mid-fight, is painted as it appears (an allowlist of its floor pieces; other mid-fight spawns stay untouched).
 
 1.2.5: animated floor objects (the Wardens energy pool channels in Tombs of Amascut) are painted too, through the lit model their animation frames share.
