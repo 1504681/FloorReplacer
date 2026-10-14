@@ -53,7 +53,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.4";
+	static final String VERSION = "1.2.5";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -111,6 +111,9 @@ public class FloorReplacerPlugin extends Plugin
 	// Original colours of every paint/model we touched, so disabling or changing the colour restores them
 	// without a scene reload. Keyed by identity: the client creates fresh objects for each scene build.
 	private final Map<Object, int[]> originals = new IdentityHashMap<>();
+	// An animated object hands out a fresh Model per frame, but the frames share the lit model's face colour
+	// arrays; the first Model seen per colour array stands for the object in originals
+	private final Map<int[], Model> animatedModels = new IdentityHashMap<>();
 	private final Set<Scene> paintedScenes = Collections.newSetFromMap(new IdentityHashMap<>());
 
 	// Map region the local player stands in (template region inside instances); -1 when unknown
@@ -170,6 +173,7 @@ public class FloorReplacerPlugin extends Plugin
 			case HOPPING:
 				// The scene is about to be rebuilt; the old paints/models are garbage now
 				originals.clear();
+				animatedModels.clear();
 				paintedScenes.clear();
 				painted = false;
 				currentRegion = -1;
@@ -581,6 +585,33 @@ public class FloorReplacerPlugin extends Plugin
 	}
 
 	/**
+	 * The model to recolour for a scene object. A static object is its own Model. An animated object (the Tombs
+	 * of Amascut Wardens pool channels, glowing floor plates) builds a Model per animation frame from one lit
+	 * base model; the frames share that base model's face colour and texture arrays, so recolouring the arrays
+	 * through any frame recolours the object until the client rebuilds the base model. Actors and anything else
+	 * give null.
+	 */
+	private Model modelOf(Renderable renderable)
+	{
+		if (renderable instanceof Model)
+		{
+			return (Model) renderable;
+		}
+		if (!(renderable instanceof DynamicObject))
+		{
+			return null;
+		}
+		Model frame = renderable.getModel();
+		int[] colors = frame != null ? frame.getFaceColors1() : null;
+		if (colors == null)
+		{
+			return null;
+		}
+		Model first = animatedModels.putIfAbsent(colors, frame);
+		return first != null ? first : frame;
+	}
+
+	/**
 	 * Floors that are really models on the tile. A near-flat model (mosaic, paving, rug, trapdoor, puddle) resting
 	 * at a plane's tile height is painted whole. A taller static model (arena platform, dock, bridge deck) only has its level faces painted,
 	 * and only those sitting at a plane's tile height: the surface you walk on, not the sides or the underside.
@@ -588,11 +619,11 @@ public class FloorReplacerPlugin extends Plugin
 	 */
 	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, boolean wide, int footprint, int target, boolean shade, int reference)
 	{
-		if (!(renderable instanceof Model))
+		Model model = modelOf(renderable);
+		if (model == null)
 		{
 			return 0;
 		}
-		Model model = (Model) renderable;
 		int[] c1 = model.getFaceColors1();
 		int[] c2 = model.getFaceColors2();
 		int[] c3 = model.getFaceColors3();
@@ -947,6 +978,7 @@ public class FloorReplacerPlugin extends Plugin
 			}
 		}
 		originals.clear();
+		animatedModels.clear();
 		painted = false;
 
 		List<Scene> scenes = new ArrayList<>(paintedScenes);
@@ -1118,11 +1150,15 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			return sb.append("null").toString();
 		}
-		if (!(renderable instanceof Model))
+		if (renderable instanceof DynamicObject)
 		{
-			return sb.append(renderable instanceof DynamicObject ? "animated (skipped)" : renderable.getClass().getSimpleName()).toString();
+			sb.append("animated ");
 		}
-		Model model = (Model) renderable;
+		Model model = modelOf(renderable);
+		if (model == null)
+		{
+			return sb.append(renderable.getClass().getSimpleName()).toString();
+		}
 		float[] ys = model.getVerticesY();
 		int[] f1 = model.getFaceIndices1();
 		int[] f2 = model.getFaceIndices2();

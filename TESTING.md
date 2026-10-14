@@ -8,3 +8,4 @@
 - CoX: the cave walls and their flat tops stay in their own colours while the room floor is painted; Strength below 100 looks like a tint, not new hues (1.2.1 to 1.2.3). Confirmed so far: Akkha, pools, patches, holes, tool spawns (1.1.9 feedback), "this is better" on 1.2.1.
 - Debug overlay follows the mouse: hover a wall tile, the header says "hovering" and the plane line says "blocked"/"blocked by object" (1.2.3).
 - Rugs and mosaics outdoors (Varrock, GE) are still painted: flat objects now need to rest at the tile height (1.2.3).
+- ToA Wardens: the two dark-red pool channel pieces (TOA_WARDENS_POOL_CHANNEL_CONNECTOR01 45594, animated 3x5) take the floor colour, and keep it through the fight (1.2.5).
