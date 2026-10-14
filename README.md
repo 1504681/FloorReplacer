@@ -18,13 +18,15 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Min brightness** and **Max brightness** (20% and 50% by default) clamp the shaded result, so a sunlit plateau can't wash out to near white and a shadowed dungeon can't go near black. They only apply while Keep shading is on. 0% and 100% mean no limit.
 
-**Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted, plus the top surface of wide platforms (2x2 tiles or more) that sit up to a tile above the floor, and only when those faces cover a real share of the object's footprint, so a stray level facet on a rock face or wall base is left alone. Animated floor objects present when the map loads (the Wardens pool channels) are painted by the same rules. Objects that spawn during a fight (acid pools, shadow markers, mechanics) are left alone. Off limits the plugin to the terrain itself.
+**Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted, plus the top surface of wide platforms (2x2 tiles or more) that sit up to a tile above the floor, and only when those faces cover a real share of the object's footprint, so a stray level facet on a rock face or wall base is left alone. Animated floor objects present when the map loads (the Wardens pool channels) are painted by the same rules. Objects that spawn during a fight (acid pools, shadow markers, mechanics) are left alone, with one exception: the Wardens phase 3 arena floor, which is a known list of floor pieces. Off limits the plugin to the terrain itself.
 
 **Never paint object IDs** takes floor object IDs, comma separated, that keep their original colours. Akkha's arena floor in Tombs of Amascut (the quadrant platform, outer rings and hourglass tiles) and the energy pools, herb patches, floor holes and tool spawns (tinderbox, axe, pickaxe, hammer) in Chambers of Xeric are always left alone because you need to see them.
 
 **Show the tile under the mouse** (off by default) shows an overlay, and writes to the client log, what is on the tile under the mouse (or under you when the mouse is off the scene), on every plane of that column, whether it is walkable and whether it was painted. Turn it on, hover the floor or wall that looks wrong and screenshot it for a bug report.
 
 ## Changelog
+
+1.2.6: the Wardens phase 3 arena floor in Tombs of Amascut, which the server lays down mid-fight, is painted as it appears (an allowlist of its floor pieces; other mid-fight spawns stay untouched).
 
 1.2.5: animated floor objects (the Wardens energy pool channels in Tombs of Amascut) are painted too, through the lit model their animation frames share.
 

@@ -33,7 +33,10 @@ import net.runelite.api.Tile;
 import net.runelite.api.WorldView;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.ClientTick;
+import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GroundObjectSpawned;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.WorldViewLoaded;
 import net.runelite.api.hooks.DrawCallbacks;
@@ -53,7 +56,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.5";
+	static final String VERSION = "1.2.6";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -89,6 +92,17 @@ public class FloorReplacerPlugin extends Plugin
 		30066, 30067, 32542, 29734, 31634, 31862, 41754, 29711,
 		29765, 29877, 29997, 29998, 29999, 30000, 30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009, 30010, 30011,
 		29781, 29782, 29783, 29784, 29785, 29786, 29787, 29788));
+	// The only objects painted when they SPAWN, because they are a floor that the server lays down mid-fight:
+	// the Tombs of Amascut Wardens phase 3 arena (TOA_WARDENS_WARPED_FLOORTILE*, _WARPED_LVL0_01-71,
+	// _WARPED_OUTSIDE_CRUMBLE*, _P3_BROKENTILE*). Everything else that spawns during a fight is a mechanic
+	private static final Set<Integer> FLOOR_ON_SPAWN = new HashSet<>();
+	static
+	{
+		for (int id = 45643; id <= 45738; id++)
+		{
+			FLOOR_ON_SPAWN.add(id);
+		}
+	}
 	// Scene.getTileHeights() is indexed in extended scene coordinates for the top-level world view, while
 	// Tile.getSceneLocation() is in plain scene coordinates (same convention as the GPU plugin's uploader)
 	private static final int SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2;
@@ -125,6 +139,12 @@ public class FloorReplacerPlugin extends Plugin
 	// Tile last written to the debug log, so each tile is described once per visit, and what was written
 	private int lastDebugTile = -1;
 	private final List<String> debugLines = new ArrayList<>();
+	// Colour parameters of the last scene pass, reused for floor pieces that spawn later
+	private int paintTarget;
+	private boolean paintShade;
+	private int paintReference;
+	// Something was painted outside a scene pass; the GPU plugin needs a re-upload on the next client tick
+	private boolean dirty;
 
 	// Luminance clamp (0..127) applied when shading is kept; set from config at the start of each paint pass
 	// How far each vertex colour moves towards the target: 100 replaces it, less lays the colour over the floor
@@ -199,7 +219,63 @@ public class FloorReplacerPlugin extends Plugin
 	}
 
 	// Objects that spawn later (acid pools, shadow markers, arena mechanics) are deliberately left alone: they
-	// are gameplay, not floor. Only the scene paint passes (map load, login) touch floor objects.
+	// are gameplay, not floor. Only the scene paint passes (map load, login) touch floor objects, with one
+	// exception: the FLOOR_ON_SPAWN allowlist, floors the server lays down mid-fight.
+
+	@Subscribe
+	public void onGameObjectSpawned(GameObjectSpawned event)
+	{
+		GameObject object = event.getGameObject();
+		if (object != null && spawnIsFloor(object.getId()))
+		{
+			boolean wide = isWide(object);
+			paintSpawn(event.getTile(), object.getRenderable(), object.getZ(), wide, footprint(object));
+		}
+	}
+
+	@Subscribe
+	public void onGroundObjectSpawned(GroundObjectSpawned event)
+	{
+		GroundObject object = event.getGroundObject();
+		if (object != null && spawnIsFloor(object.getId()))
+		{
+			paintSpawn(event.getTile(), object.getRenderable(), object.getZ(), false, 1);
+		}
+	}
+
+	private boolean spawnIsFloor(int id)
+	{
+		return painted && config.floorObjects() && FLOOR_ON_SPAWN.contains(id) && !excluded(id);
+	}
+
+	private void paintSpawn(Tile tile, Renderable renderable, int objectZ, boolean wide, int footprint)
+	{
+		WorldView view = client.getTopLevelWorldView();
+		Scene scene = view != null ? view.getScene() : null;
+		if (tile == null || scene == null)
+		{
+			return;
+		}
+		int offset = heightOffset(scene);
+		int[] levels = walkableHeights(tile, scene.getTileHeights(), offset, wide);
+		if (paintFloorObject(renderable, objectZ, levels, wide, footprint, paintTarget, paintShade, paintReference) > 0)
+		{
+			dirty = true;
+		}
+	}
+
+	@Subscribe
+	public void onClientTick(ClientTick event)
+	{
+		if (dirty)
+		{
+			dirty = false;
+			for (Scene scene : paintedScenes)
+			{
+				invalidate(scene);
+			}
+		}
+	}
 
 	@Subscribe
 	public void onGameTick(GameTick event)
@@ -415,6 +491,9 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		int reference = shade ? averageLuminance(tiles) : 0;
 		excludedIds = parseIds(config.excludedObjects());
+		paintTarget = target;
+		paintShade = shade;
+		paintReference = reference;
 
 		int[][][] heights = scene.getTileHeights();
 		int offset = heightOffset(scene);

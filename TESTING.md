@@ -9,3 +9,4 @@
 - Debug overlay follows the mouse: hover a wall tile, the header says "hovering" and the plane line says "blocked"/"blocked by object" (1.2.3).
 - Rugs and mosaics outdoors (Varrock, GE) are still painted: flat objects now need to rest at the tile height (1.2.3).
 - ToA Wardens: the two dark-red pool channel pieces (TOA_WARDENS_POOL_CHANNEL_CONNECTOR01 45594, animated 3x5) take the floor colour, and keep it through the fight (1.2.5).
+- ToA Wardens P3: the warped arena floor (TOA_WARDENS_WARPED_FLOORTILE/LVL0/P3_BROKENTILE 45643-45738) takes the floor colour as it appears; shadows and other P3 spawns do not (1.2.6).
