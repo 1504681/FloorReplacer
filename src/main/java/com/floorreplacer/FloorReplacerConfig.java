@@ -59,7 +59,7 @@ public interface FloorReplacerConfig extends Config
 	@ConfigItem(
 		keyName = "strength",
 		name = "Strength",
-		description = "100% replaces the floor colour completely. Lower values only move the floor part of the way towards the chosen colour: it keeps some of its own look, with less variation and a shifted tone.",
+		description = "100% replaces the floor colour completely. Lower values lay the colour over the floor like a translucent layer: the floor keeps its own look underneath, softened and tinted.",
 		position = 1
 	)
 	default int strength()

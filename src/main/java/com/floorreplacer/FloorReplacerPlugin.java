@@ -51,7 +51,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.0";
+	static final String VERSION = "1.2.1";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -117,8 +117,12 @@ public class FloorReplacerPlugin extends Plugin
 	private final List<String> debugLines = new ArrayList<>();
 
 	// Luminance clamp (0..127) applied when shading is kept; set from config at the start of each paint pass
-	// How far each vertex colour moves towards the target: 100 replaces it, less keeps part of the original look
+	// How far each vertex colour moves towards the target: 100 replaces it, less lays the colour over the floor
+	// like a translucent layer (blended in RGB with the client's own palette formula, cached per packed colour)
 	private int strength = 100;
+	private int targetRgb;
+	private double brightness = DEFAULT_BRIGHTNESS;
+	private int[] blendCache;
 	private int minLum = 0;
 	private int maxLum = JagexColor.LUMINANCE_MAX;
 
@@ -378,12 +382,21 @@ public class FloorReplacerPlugin extends Plugin
 		}
 
 		TextureProvider textures = client.getTextureProvider();
-		double brightness = textures != null ? textures.getBrightness() : DEFAULT_BRIGHTNESS;
-		int target = JagexColor.rgbToHSL(config.color().getRGB() & 0xFFFFFF, brightness) & 0xFFFF;
+		brightness = textures != null ? textures.getBrightness() : DEFAULT_BRIGHTNESS;
+		targetRgb = config.color().getRGB() & 0xFFFFFF;
+		int target = JagexColor.rgbToHSL(targetRgb, brightness) & 0xFFFF;
 		boolean shade = config.keepShading();
 		boolean objects = config.floorObjects();
 		boolean skipSteep = config.skipSteep();
 		strength = Math.max(0, Math.min(100, config.strength()));
+		if (strength < 100)
+		{
+			if (blendCache == null)
+			{
+				blendCache = new int[1 << 16];
+			}
+			Arrays.fill(blendCache, -1);
+		}
 		minLum = JagexColor.LUMINANCE_MAX * Math.max(0, Math.min(100, config.minBrightness())) / 100;
 		maxLum = JagexColor.LUMINANCE_MAX * Math.max(0, Math.min(100, config.maxBrightness())) / 100;
 		if (maxLum < minLum)
@@ -439,11 +452,15 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		if (objects)
 		{
-			int[] levels = walkableHeights(tile, heights, offset);
+			// A wall is one tile thick and a storey tall, so its top sits exactly at the plane above's height map.
+			// Only wide platforms may match heights of planes above their own; everything else uses its own plane
+			// and the ones below (a sunken arena floor seen from the plane above still counts).
+			int[] own = walkableHeights(tile, heights, offset, false);
+			int[] all = walkableHeights(tile, heights, offset, true);
 			GroundObject ground = tile.getGroundObject();
 			if (ground != null && !excluded(ground.getId()))
 			{
-				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), levels, false, target, shade, reference);
+				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), own, false, target, shade, reference);
 			}
 			GameObject[] gameObjects = tile.getGameObjects();
 			if (gameObjects != null)
@@ -452,7 +469,8 @@ public class FloorReplacerPlugin extends Plugin
 				{
 					if (gameObject != null && !excluded(gameObject.getId()))
 					{
-						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), levels, isWide(gameObject), target, shade, reference);
+						boolean wide = isWide(gameObject);
+						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), wide ? all : own, wide, target, shade, reference);
 					}
 				}
 			}
@@ -514,8 +532,11 @@ public class FloorReplacerPlugin extends Plugin
 		return false;
 	}
 
-	/** Tile heights of every plane at this tile's column, or empty when the tile is outside the height map. */
-	private static int[] walkableHeights(Tile tile, int[][][] heights, int offset)
+	/**
+	 * Tile heights at this tile's column: the tile's own plane and those below, plus the planes above when
+	 * upper is set. Empty when the tile is outside the height map.
+	 */
+	private static int[] walkableHeights(Tile tile, int[][][] heights, int offset, boolean upper)
 	{
 		Point loc = tile.getSceneLocation();
 		if (heights == null || loc == null)
@@ -524,16 +545,18 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		int sx = loc.getX() + offset;
 		int sy = loc.getY() + offset;
-		int[] out = new int[heights.length];
+		int top = upper ? heights.length - 1 : Math.min(heights.length - 1, tile.getPlane());
+		int[] out = new int[top + 1];
 		int count = 0;
-		for (int[][] plane : heights)
+		for (int z = 0; z <= top; z++)
 		{
+			int[][] plane = heights[z];
 			if (plane != null && sx >= 0 && sx < plane.length && plane[sx] != null && sy >= 0 && sy < plane[sx].length)
 			{
 				out[count++] = plane[sx][sy];
 			}
 		}
-		return count == out.length ? out : java.util.Arrays.copyOf(out, count);
+		return count == out.length ? out : Arrays.copyOf(out, count);
 	}
 
 	/**
@@ -735,31 +758,102 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			return original;
 		}
-		int hue = JagexColor.unpackHue((short) target);
-		int sat = JagexColor.unpackSaturation((short) target);
+		if (strength < 100)
+		{
+			return overlay(original);
+		}
 		int lum = JagexColor.unpackLuminance((short) target);
 		if (shade)
 		{
 			lum += JagexColor.unpackLuminance((short) original) - reference;
 		}
-		if (strength < 100)
-		{
-			// Partial strength: move the original colour part of the way, so the floor keeps some of its own look
-			// while its variation shrinks and its tone shifts towards the chosen colour
-			hue = lerpHue(JagexColor.unpackHue((short) original), hue, strength);
-			sat = Math.round(JagexColor.unpackSaturation((short) original) + (sat - JagexColor.unpackSaturation((short) original)) * strength / 100f);
-			lum = Math.round(JagexColor.unpackLuminance((short) original) + (lum - JagexColor.unpackLuminance((short) original)) * strength / 100f);
-		}
 		lum = Math.max(minLum, Math.min(maxLum, lum));
-		return JagexColor.packHSL(hue, sat, lum) & 0xFFFF;
+		return JagexColor.packHSL(
+			JagexColor.unpackHue((short) target),
+			JagexColor.unpackSaturation((short) target),
+			lum) & 0xFFFF;
 	}
 
-	/** Hue is circular (0..HUE_MAX): interpolate the short way round. */
-	private static int lerpHue(int from, int to, int percent)
+	/**
+	 * Partial strength: the chosen colour laid over the original like a translucent layer. Blended in RGB, so a
+	 * brown floor heading for blue goes through grey-blue, never through green or purple.
+	 */
+	private int overlay(int original)
 	{
-		int range = JagexColor.HUE_MAX + 1;
-		int diff = ((to - from) % range + range + range / 2) % range - range / 2;
-		return ((from + Math.round(diff * percent / 100f)) % range + range) % range;
+		int key = original & 0xFFFF;
+		int cached = blendCache[key];
+		if (cached >= 0)
+		{
+			return cached;
+		}
+		int rgb = hslToRgb(key, brightness);
+		int r = mix(rgb >> 16 & 0xFF, targetRgb >> 16 & 0xFF);
+		int g = mix(rgb >> 8 & 0xFF, targetRgb >> 8 & 0xFF);
+		int b = mix(rgb & 0xFF, targetRgb & 0xFF);
+		int packed = JagexColor.rgbToHSL(r << 16 | g << 8 | b, brightness) & 0xFFFF;
+		int lum = Math.max(minLum, Math.min(maxLum, JagexColor.unpackLuminance((short) packed)));
+		packed = JagexColor.packHSL(JagexColor.unpackHue((short) packed), JagexColor.unpackSaturation((short) packed), lum) & 0xFFFF;
+		blendCache[key] = packed;
+		return packed;
+	}
+
+	private int mix(int from, int to)
+	{
+		return from + Math.round((to - from) * strength / 100f);
+	}
+
+	/** The client's own palette formula: packed HSL to the RGB it is drawn with at this brightness setting. */
+	private static int hslToRgb(int hsl, double brightness)
+	{
+		double hue = JagexColor.unpackHue((short) hsl) / 64.0 + 0.0078125;
+		double sat = JagexColor.unpackSaturation((short) hsl) / 8.0 + 0.0625;
+		double lum = JagexColor.unpackLuminance((short) hsl) / 128.0;
+		double r = lum;
+		double g = lum;
+		double b = lum;
+		if (sat != 0.0)
+		{
+			double q = lum < 0.5 ? lum * (1.0 + sat) : lum + sat - lum * sat;
+			double p = 2.0 * lum - q;
+			double hr = hue + 1.0 / 3.0;
+			if (hr > 1.0)
+			{
+				hr -= 1.0;
+			}
+			double hb = hue - 1.0 / 3.0;
+			if (hb < 0.0)
+			{
+				hb += 1.0;
+			}
+			r = channel(p, q, hr);
+			g = channel(p, q, hue);
+			b = channel(p, q, hb);
+		}
+		return gamma(r, brightness) << 16 | gamma(g, brightness) << 8 | gamma(b, brightness);
+	}
+
+	private static double channel(double p, double q, double h)
+	{
+		if (6.0 * h < 1.0)
+		{
+			return p + (q - p) * 6.0 * h;
+		}
+		if (2.0 * h < 1.0)
+		{
+			return q;
+		}
+		if (3.0 * h < 2.0)
+		{
+			return p + (q - p) * (2.0 / 3.0 - h) * 6.0;
+		}
+		return p;
+	}
+
+	private static int gamma(double value, double brightness)
+	{
+		int c = (int) (value * 256.0);
+		c = (int) (Math.pow(c / 256.0, brightness) * 256.0);
+		return Math.max(0, Math.min(255, c));
 	}
 
 	private int averageLuminance(Tile[][][] tiles)
@@ -914,7 +1008,8 @@ public class FloorReplacerPlugin extends Plugin
 
 	private void describeTile(Tile tile, String label, int[][][] heights, int offset, List<String> lines)
 	{
-		int[] levels = walkableHeights(tile, heights, offset);
+		int[] own = walkableHeights(tile, heights, offset, false);
+		int[] levels = walkableHeights(tile, heights, offset, true);
 		StringBuilder sb = new StringBuilder(label).append(" heights=").append(Arrays.toString(levels));
 		SceneTilePaint paint = tile.getSceneTilePaint();
 		if (paint != null)
@@ -939,7 +1034,7 @@ public class FloorReplacerPlugin extends Plugin
 		GroundObject ground = tile.getGroundObject();
 		if (ground != null)
 		{
-			lines.add(describe("ground", ground.getId(), ground.getRenderable(), ground.getZ(), levels, false, "1x1"));
+			lines.add(describe("ground", ground.getId(), ground.getRenderable(), ground.getZ(), own, false, "1x1"));
 		}
 		GameObject[] gameObjects = tile.getGameObjects();
 		if (gameObjects != null)
@@ -953,17 +1048,18 @@ public class FloorReplacerPlugin extends Plugin
 					String size = min != null && max != null
 						? (max.getX() - min.getX() + 1) + "x" + (max.getY() - min.getY() + 1)
 						: "?";
-					lines.add(describe("object", gameObject.getId(), gameObject.getRenderable(), gameObject.getZ(), levels, isWide(gameObject), size));
+					boolean wide = isWide(gameObject);
+					lines.add(describe("object", gameObject.getId(), gameObject.getRenderable(), gameObject.getZ(), wide ? levels : own, wide, size));
 				}
 			}
 		}
 		DecorativeObject deco = tile.getDecorativeObject();
 		if (deco != null)
 		{
-			lines.add(describe("decor", deco.getId(), deco.getRenderable(), deco.getZ(), levels, false, "1x1"));
+			lines.add(describe("decor", deco.getId(), deco.getRenderable(), deco.getZ(), own, false, "1x1"));
 			if (deco.getRenderable2() != null)
 			{
-				lines.add(describe("decor2", deco.getId(), deco.getRenderable2(), deco.getZ(), levels, false, "1x1"));
+				lines.add(describe("decor2", deco.getId(), deco.getRenderable2(), deco.getZ(), own, false, "1x1"));
 			}
 		}
 	}

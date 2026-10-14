@@ -12,7 +12,7 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Floor colour** is the colour every tile gets. Default is a muted slate blue (#64878D).
 
-**Strength** (100% by default) is how far each tile moves towards that colour. At 100% the floor is replaced outright. Lower values keep part of the floor's own look while flattening its variation and shifting its tone, for a softer, more uniform ground instead of a flat one.
+**Strength** (100% by default) is how much of that colour goes on. At 100% the floor is replaced outright. Lower values lay the colour over the floor like a translucent layer, so the ground keeps its own look underneath, softened and tinted.
 
 **Keep shading** (on by default) keeps each tile's light and dark variation relative to the average floor brightness, so hills, slopes and paths are still readable in the new colour. Turn it off for one perfectly flat colour with no shading at all.
 
@@ -27,6 +27,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 **Show the tile under you** (off by default) shows an overlay, and writes to the client log, what is on each tile you step onto, on every plane of that column, and whether it was painted. Turn it on, stand on the floor that stayed unpainted and screenshot it for a bug report.
 
 ## Changelog
+
+1.2.1: Strength blends like a translucent layer (RGB) instead of through the hue wheel; wall tops no longer count as floor (only wide platforms may match the height of the plane above).
 
 1.2.0: Strength setting to soften the floor instead of replacing it; steep terrain (cave walls, cliffs) is skipped by default.
 
