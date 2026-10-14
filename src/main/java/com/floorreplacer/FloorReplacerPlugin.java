@@ -12,6 +12,8 @@ import java.util.Set;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.CollisionData;
+import net.runelite.api.CollisionDataFlag;
 import net.runelite.api.Constants;
 import net.runelite.api.DecorativeObject;
 import net.runelite.api.DynamicObject;
@@ -51,7 +53,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.2";
+	static final String VERSION = "1.2.3";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -80,10 +82,13 @@ public class FloorReplacerPlugin extends Plugin
 	// Chambers of Xeric energy pools (RAIDS_ENERGY_POOL and its glow) and herb patches (RAIDS_PATCH_EMPTY,
 	// RAIDS_PATCH_GROUNDDECOR, RAIDS_PATCH_* seed/growth/fully grown) and the holes down to the next floor
 	// (RAIDS_DESCENTTO1/2) and the tool spawns (RAIDS_ICEDEMON_TINDERBOX/AXE, RAIDS_STONEGUARDIANS_PICKAXE,
-	// RAIDS_LASERCRABS_HAMMER): flat, but you need to see them
+	// RAIDS_LASERCRABS_HAMMER): flat, but you need to see them. The cave walls RAIDS_WALL_1/2 and their flat
+	// cap pieces RAIDS_WALL_TOP_CORNER_INNER/OUTER, _EDGE, _FILLED, _PLANE, _DOOR (29781-29788): a wall top is a
+	// flat model, but it is not floor
 	private static final Set<Integer> NEVER_PAINT = new HashSet<>(Arrays.asList(
 		30066, 30067, 32542, 29734, 31634, 31862, 41754, 29711,
-		29765, 29877, 29997, 29998, 29999, 30000, 30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009, 30010, 30011));
+		29765, 29877, 29997, 29998, 29999, 30000, 30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009, 30010, 30011,
+		29781, 29782, 29783, 29784, 29785, 29786, 29787, 29788));
 	// Scene.getTileHeights() is indexed in extended scene coordinates for the top-level world view, while
 	// Tile.getSceneLocation() is in plain scene coordinates (same convention as the GPU plugin's uploader)
 	private static final int SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2;
@@ -576,8 +581,8 @@ public class FloorReplacerPlugin extends Plugin
 	}
 
 	/**
-	 * Floors that are really models on the tile. A near-flat model (mosaic, paving, rug, trapdoor, puddle) is
-	 * painted whole. A taller static model (arena platform, dock, bridge deck) only has its level faces painted,
+	 * Floors that are really models on the tile. A near-flat model (mosaic, paving, rug, trapdoor, puddle) resting
+	 * at a plane's tile height is painted whole. A taller static model (arena platform, dock, bridge deck) only has its level faces painted,
 	 * and only those sitting at a plane's tile height: the surface you walk on, not the sides or the underside.
 	 * Animated objects and actors are left alone.
 	 */
@@ -613,13 +618,22 @@ public class FloorReplacerPlugin extends Plugin
 			max = Math.max(max, ys[i]);
 		}
 
-		boolean[] mask = null;
-		if (max - min > FLAT_OBJECT_HEIGHT)
+		if (levels.length == 0)
 		{
-			if (levels.length == 0)
+			return 0;
+		}
+		boolean[] mask = null;
+		if (max - min <= FLAT_OBJECT_HEIGHT)
+		{
+			// A flat model is only floor when it rests on one. Cave wall caps, roof slabs and ledges are flat
+			// too, but they hang a storey above the tile height
+			if (!isFloorHeight(objectZ + max, levels, false))
 			{
 				return 0;
 			}
+		}
+		else
+		{
 			mask = new boolean[n];
 			boolean any = false;
 			for (int i = 0; i < n; i++)
@@ -963,6 +977,17 @@ public class FloorReplacerPlugin extends Plugin
 		int plane = view.getPlane();
 		int sx = lp.getSceneX();
 		int sy = lp.getSceneY();
+		String where = "standing on";
+		// The tile under the mouse wins, so a wall or ledge you cannot stand on can be inspected too
+		Tile hovered = view.getSelectedSceneTile();
+		Point hoverLoc = hovered != null ? hovered.getSceneLocation() : null;
+		if (hoverLoc != null)
+		{
+			plane = hovered.getRenderLevel();
+			sx = hoverLoc.getX();
+			sy = hoverLoc.getY();
+			where = "hovering";
+		}
 		int key = (plane << 16) | ((sx & 0xFF) << 8) | (sy & 0xFF);
 		if (key == lastDebugTile)
 		{
@@ -977,7 +1002,8 @@ public class FloorReplacerPlugin extends Plugin
 		int[][][] heights = scene.getTileHeights();
 		int offset = heightOffset(scene);
 		List<String> lines = new ArrayList<>();
-		lines.add(String.format("v%s standing on plane %d scene %d,%d region %d painted=%b", VERSION, plane, sx, sy, currentRegion, painted));
+		lines.add(String.format("v%s %s plane %d scene %d,%d region %d painted=%b", VERSION, where, plane, sx, sy, currentRegion, painted));
+		CollisionData[] collision = view.getCollisionMaps();
 		for (int z = 0; z < tiles.length; z++)
 		{
 			if (sx >= tiles[z].length || sy >= tiles[z][sx].length || tiles[z][sx][sy] == null)
@@ -985,7 +1011,7 @@ public class FloorReplacerPlugin extends Plugin
 				continue;
 			}
 			Tile tile = tiles[z][sx][sy];
-			describeTile(tile, "plane " + z, heights, offset, lines);
+			describeTile(tile, "plane " + z + walkability(collision, z, sx, sy), heights, offset, lines);
 			if (tile.getBridge() != null)
 			{
 				describeTile(tile.getBridge(), "plane " + z + " bridge", heights, offset, lines);
@@ -997,6 +1023,30 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			log.info("Floor Replacer: {}", line);
 		}
+	}
+
+	/** " blocked" / " blocked by object" / "" for the debug line, from the collision map. */
+	private static String walkability(CollisionData[] collision, int plane, int sx, int sy)
+	{
+		if (collision == null || plane >= collision.length || collision[plane] == null)
+		{
+			return "";
+		}
+		int[][] flags = collision[plane].getFlags();
+		if (flags == null || sx >= flags.length || flags[sx] == null || sy >= flags[sx].length)
+		{
+			return "";
+		}
+		int f = flags[sx][sy];
+		if ((f & CollisionDataFlag.BLOCK_MOVEMENT_FULL) != 0)
+		{
+			return " blocked";
+		}
+		if ((f & CollisionDataFlag.BLOCK_MOVEMENT_OBJECT) != 0)
+		{
+			return " blocked by object";
+		}
+		return "";
 	}
 
 	private void describeTile(Tile tile, String label, int[][][] heights, int offset, List<String> lines)

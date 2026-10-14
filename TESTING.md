@@ -5,3 +5,6 @@
 - CoX: energy pools, herb patches and the holes down to the next floor keep their own look, the surrounding floor is painted (1.1.7 to 1.1.9).
 - Mid-fight spawns (Zebak acid, Verzik/Xarpus shadows) stay unpainted after a scene repaint on login (1.1.3).
 - Never paint object IDs: add one id, that object is left alone; tile debug overlay shows on screen only when its setting is on (1.1.10).
+- CoX: the cave walls and their flat tops stay in their own colours while the room floor is painted; Strength below 100 looks like a tint, not new hues (1.2.1 to 1.2.3). Confirmed so far: Akkha, pools, patches, holes, tool spawns (1.1.9 feedback), "this is better" on 1.2.1.
+- Debug overlay follows the mouse: hover a wall tile, the header says "hovering" and the plane line says "blocked"/"blocked by object" (1.2.3).
+- Rugs and mosaics outdoors (Varrock, GE) are still painted: flat objects now need to rest at the tile height (1.2.3).

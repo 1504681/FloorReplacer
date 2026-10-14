@@ -22,9 +22,11 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Never paint object IDs** takes floor object IDs, comma separated, that keep their original colours. Akkha's arena floor in Tombs of Amascut (the quadrant platform, outer rings and hourglass tiles) and the energy pools, herb patches, floor holes and tool spawns (tinderbox, axe, pickaxe, hammer) in Chambers of Xeric are always left alone because you need to see them.
 
-**Show the tile under you** (off by default) shows an overlay, and writes to the client log, what is on each tile you step onto, on every plane of that column, and whether it was painted. Turn it on, stand on the floor that stayed unpainted and screenshot it for a bug report.
+**Show the tile under the mouse** (off by default) shows an overlay, and writes to the client log, what is on the tile under the mouse (or under you when the mouse is off the scene), on every plane of that column, whether it is walkable and whether it was painted. Turn it on, hover the floor or wall that looks wrong and screenshot it for a bug report.
 
 ## Changelog
+
+1.2.3: flat floor objects must rest at a plane's tile height (Chambers of Xeric wall caps are flat but a storey up); the cave walls and wall tops there are never painted; the debug overlay describes the tile under the mouse.
 
 1.2.2: level facets on rock faces and wall bases are no longer painted (the painted faces must cover at least 30% of the object's footprint); the Skip walls and cliffs setting is gone, it skipped real hills and missed the cave walls.
 

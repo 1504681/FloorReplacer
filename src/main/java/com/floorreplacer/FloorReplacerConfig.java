@@ -262,8 +262,8 @@ public interface FloorReplacerConfig extends Config
 
 	@ConfigItem(
 		keyName = "debugLog",
-		name = "Show the tile under you",
-		description = "Shows an overlay and writes to the client log what is on the tile you step onto (terrain, floor objects, heights, painted or not). For bug reports about floors that stay unpainted: screenshot it.",
+		name = "Show the tile under the mouse",
+		description = "Shows an overlay and writes to the client log what is on the tile under the mouse, or under you when the mouse is off the scene (terrain, floor objects, heights, painted or not). For bug reports: hover the tile and screenshot it.",
 		position = 52
 	)
 	default boolean debugLog()
