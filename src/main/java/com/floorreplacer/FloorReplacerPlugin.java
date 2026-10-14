@@ -51,7 +51,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.1";
+	static final String VERSION = "1.2.2";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -68,8 +68,10 @@ public class FloorReplacerPlugin extends Plugin
 	// A thick model whose footprint is at least 2x2 tiles is a platform, not furniture: its top surface counts
 	// as floor when it sits up to this far above a plane's tile height (a crate or table is 1 tile wide)
 	private static final int PLATFORM_HEIGHT = 128;
-	// Terrain whose corners differ by more than this across one tile is a cave wall or cliff, not a floor
-	private static final int STEEP_TERRAIN = 96;
+	// The level faces found on a thick model must cover at least this share of its footprint to be a floor.
+	// A platform's walking surface covers nearly all of it; the odd level facet on a rock face or wall base
+	// covers almost none
+	private static final float MIN_COVERAGE = 0.3f;
 	// Floor objects that carry mechanic information and must keep their own look. Akkha's arena in Tombs of
 	// Amascut: AKKHA_PLATFORM01-24 (the quadrant floor), AKKHA_ARENA_OUTER_LVL1/LVL2 rings, the hourglass
 	// floor pieces (gameval ObjectID 45872-46067)
@@ -387,7 +389,6 @@ public class FloorReplacerPlugin extends Plugin
 		int target = JagexColor.rgbToHSL(targetRgb, brightness) & 0xFFFF;
 		boolean shade = config.keepShading();
 		boolean objects = config.floorObjects();
-		boolean skipSteep = config.skipSteep();
 		strength = Math.max(0, Math.min(100, config.strength()));
 		if (strength < 100)
 		{
@@ -419,11 +420,11 @@ public class FloorReplacerPlugin extends Plugin
 					{
 						continue;
 					}
-					count += paintTile(tile, heights, offset, target, shade, reference, objects, skipSteep);
+					count += paintTile(tile, heights, offset, target, shade, reference, objects);
 					Tile bridge = tile.getBridge();
 					if (bridge != null)
 					{
-						count += paintTile(bridge, heights, offset, target, shade, reference, objects, skipSteep);
+						count += paintTile(bridge, heights, offset, target, shade, reference, objects);
 					}
 				}
 			}
@@ -435,11 +436,11 @@ public class FloorReplacerPlugin extends Plugin
 		log.debug("Painted {} floor tiles in world view {}", count, scene.getWorldViewId());
 	}
 
-	private int paintTile(Tile tile, int[][][] heights, int offset, int target, boolean shade, int reference, boolean objects, boolean skipSteep)
+	private int paintTile(Tile tile, int[][][] heights, int offset, int target, boolean shade, int reference, boolean objects)
 	{
 		int painted = 0;
 		SceneTilePaint paint = tile.getSceneTilePaint();
-		if (paint != null && !(skipSteep && steepPaint(tile, heights, offset)))
+		if (paint != null)
 		{
 			paintPaint(paint, target, shade, reference);
 			painted++;
@@ -447,7 +448,7 @@ public class FloorReplacerPlugin extends Plugin
 		SceneTileModel model = tile.getSceneTileModel();
 		if (model != null)
 		{
-			paintModel(model, skipSteep, target, shade, reference);
+			paintModel(model, target, shade, reference);
 			painted++;
 		}
 		if (objects)
@@ -460,7 +461,7 @@ public class FloorReplacerPlugin extends Plugin
 			GroundObject ground = tile.getGroundObject();
 			if (ground != null && !excluded(ground.getId()))
 			{
-				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), own, false, target, shade, reference);
+				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), own, false, 1, target, shade, reference);
 			}
 			GameObject[] gameObjects = tile.getGameObjects();
 			if (gameObjects != null)
@@ -470,7 +471,7 @@ public class FloorReplacerPlugin extends Plugin
 					if (gameObject != null && !excluded(gameObject.getId()))
 					{
 						boolean wide = isWide(gameObject);
-						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), wide ? all : own, wide, target, shade, reference);
+						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), wide ? all : own, wide, footprint(gameObject), target, shade, reference);
 					}
 				}
 			}
@@ -483,30 +484,45 @@ public class FloorReplacerPlugin extends Plugin
 		return scene.getWorldViewId() == WorldView.TOPLEVEL ? SCENE_OFFSET : 0;
 	}
 
-	/** True when the four corners of a flat-painted tile differ by more than a wall's worth of height. */
-	private static boolean steepPaint(Tile tile, int[][][] heights, int offset)
+	/** Number of tiles the object stands on. */
+	private static int footprint(GameObject object)
 	{
-		Point loc = tile.getSceneLocation();
-		int z = tile.getRenderLevel();
-		if (heights == null || loc == null || z < 0 || z >= heights.length || heights[z] == null)
+		Point min = object.getSceneMinLocation();
+		Point max = object.getSceneMaxLocation();
+		if (min == null || max == null)
 		{
-			return false;
+			return 1;
 		}
-		int[][] plane = heights[z];
-		int x = loc.getX() + offset;
-		int y = loc.getY() + offset;
-		if (x < 0 || y < 0 || x + 1 >= plane.length || plane[x] == null || plane[x + 1] == null
-			|| y + 1 >= plane[x].length || y + 1 >= plane[x + 1].length)
+		return Math.max(1, (max.getX() - min.getX() + 1) * (max.getY() - min.getY() + 1));
+	}
+
+	/** Share of the footprint (in tiles) covered by the given faces, seen from above. Can exceed 1 for overlapping faces. */
+	private static float coverage(Model model, boolean[] faces, int footprint)
+	{
+		float[] xs = model.getVerticesX();
+		float[] zs = model.getVerticesZ();
+		int[] f1 = model.getFaceIndices1();
+		int[] f2 = model.getFaceIndices2();
+		int[] f3 = model.getFaceIndices3();
+		if (xs == null || zs == null || f1 == null || f2 == null || f3 == null)
 		{
-			return false;
+			return 1f;
 		}
-		int sw = plane[x][y];
-		int se = plane[x + 1][y];
-		int ne = plane[x + 1][y + 1];
-		int nw = plane[x][y + 1];
-		int hi = Math.max(Math.max(sw, se), Math.max(ne, nw));
-		int lo = Math.min(Math.min(sw, se), Math.min(ne, nw));
-		return hi - lo > STEEP_TERRAIN;
+		int vertices = Math.min(model.getVerticesCount(), Math.min(xs.length, zs.length));
+		double area = 0;
+		for (int i = 0; i < faces.length; i++)
+		{
+			if (!faces[i] || f1[i] >= vertices || f2[i] >= vertices || f3[i] >= vertices)
+			{
+				continue;
+			}
+			double ax = xs[f2[i]] - xs[f1[i]];
+			double az = zs[f2[i]] - zs[f1[i]];
+			double bx = xs[f3[i]] - xs[f1[i]];
+			double bz = zs[f3[i]] - zs[f1[i]];
+			area += Math.abs(ax * bz - az * bx) / 2.0;
+		}
+		return (float) (area / (footprint * 128.0 * 128.0));
 	}
 
 	/** True when the object covers at least 2x2 tiles: a platform or deck rather than a crate or table. */
@@ -565,7 +581,7 @@ public class FloorReplacerPlugin extends Plugin
 	 * and only those sitting at a plane's tile height: the surface you walk on, not the sides or the underside.
 	 * Animated objects and actors are left alone.
 	 */
-	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, boolean wide, int target, boolean shade, int reference)
+	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, boolean wide, int footprint, int target, boolean shade, int reference)
 	{
 		if (!(renderable instanceof Model))
 		{
@@ -629,8 +645,9 @@ public class FloorReplacerPlugin extends Plugin
 					any = true;
 				}
 			}
-			if (!any)
+			if (!any || coverage(model, mask, footprint) < MIN_COVERAGE)
 			{
+				// a few level facets on a rock face or wall base are not a floor
 				return 0;
 			}
 		}
@@ -687,7 +704,7 @@ public class FloorReplacerPlugin extends Plugin
 		paint.setTexture(-1);
 	}
 
-	private void paintModel(SceneTileModel model, boolean skipSteep, int target, boolean shade, int reference)
+	private void paintModel(SceneTileModel model, int target, boolean shade, int reference)
 	{
 		int[] a = model.getTriangleColorA();
 		int[] b = model.getTriangleColorB();
@@ -698,11 +715,6 @@ public class FloorReplacerPlugin extends Plugin
 			return;
 		}
 		int n = a.length;
-		int[] vy = model.getVertexY();
-		int[] fx = model.getFaceX();
-		int[] fy = model.getFaceY();
-		int[] fz = model.getFaceZ();
-		boolean slopes = skipSteep && vy != null && fx != null && fy != null && fz != null;
 		if (!originals.containsKey(model))
 		{
 			int[] copy = new int[tex != null ? 4 * n : 3 * n];
@@ -718,25 +730,6 @@ public class FloorReplacerPlugin extends Plugin
 		int[] orig = originals.get(model);
 		for (int i = 0; i < n; i++)
 		{
-			if (slopes && i < fx.length && i < fy.length && i < fz.length
-				&& fx[i] < vy.length && fy[i] < vy.length && fz[i] < vy.length)
-			{
-				int y1 = vy[fx[i]];
-				int y2 = vy[fy[i]];
-				int y3 = vy[fz[i]];
-				if (Math.max(y1, Math.max(y2, y3)) - Math.min(y1, Math.min(y2, y3)) > STEEP_TERRAIN)
-				{
-					// wall or cliff face: keep its own look
-					a[i] = orig[i];
-					b[i] = orig[n + i];
-					c[i] = orig[2 * n + i];
-					if (tex != null && orig.length == 4 * n)
-					{
-						tex[i] = orig[3 * n + i];
-					}
-					continue;
-				}
-			}
 			a[i] = recolor(orig[i], target, shade, reference);
 			b[i] = recolor(orig[n + i], target, shade, reference);
 			c[i] = recolor(orig[2 * n + i], target, shade, reference);
@@ -1016,7 +1009,7 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			sb.append(" paint tex=").append(paint.getTexture())
 				.append(paint.getNeColor() == HIDDEN ? " hidden" : "")
-				.append(steepPaint(tile, heights, offset) ? " steep" : "")
+
 				.append(originals.containsKey(paint) ? " (painted)" : " (not painted)");
 		}
 		SceneTileModel model = tile.getSceneTileModel();
@@ -1034,7 +1027,7 @@ public class FloorReplacerPlugin extends Plugin
 		GroundObject ground = tile.getGroundObject();
 		if (ground != null)
 		{
-			lines.add(describe("ground", ground.getId(), ground.getRenderable(), ground.getZ(), own, false, "1x1"));
+			lines.add(describe("ground", ground.getId(), ground.getRenderable(), ground.getZ(), own, false, "1x1", 1));
 		}
 		GameObject[] gameObjects = tile.getGameObjects();
 		if (gameObjects != null)
@@ -1049,22 +1042,22 @@ public class FloorReplacerPlugin extends Plugin
 						? (max.getX() - min.getX() + 1) + "x" + (max.getY() - min.getY() + 1)
 						: "?";
 					boolean wide = isWide(gameObject);
-					lines.add(describe("object", gameObject.getId(), gameObject.getRenderable(), gameObject.getZ(), wide ? levels : own, wide, size));
+					lines.add(describe("object", gameObject.getId(), gameObject.getRenderable(), gameObject.getZ(), wide ? levels : own, wide, size, footprint(gameObject)));
 				}
 			}
 		}
 		DecorativeObject deco = tile.getDecorativeObject();
 		if (deco != null)
 		{
-			lines.add(describe("decor", deco.getId(), deco.getRenderable(), deco.getZ(), own, false, "1x1"));
+			lines.add(describe("decor", deco.getId(), deco.getRenderable(), deco.getZ(), own, false, "1x1", 1));
 			if (deco.getRenderable2() != null)
 			{
-				lines.add(describe("decor2", deco.getId(), deco.getRenderable2(), deco.getZ(), own, false, "1x1"));
+				lines.add(describe("decor2", deco.getId(), deco.getRenderable2(), deco.getZ(), own, false, "1x1", 1));
 			}
 		}
 	}
 
-	private String describe(String kind, int id, Renderable renderable, int objectZ, int[] levels, boolean wide, String size)
+	private String describe(String kind, int id, Renderable renderable, int objectZ, int[] levels, boolean wide, String size, int footprint)
 	{
 		StringBuilder sb = new StringBuilder("  ").append(kind).append(' ').append(id).append(' ').append(size).append(' ');
 		if (excluded(id))
@@ -1100,6 +1093,7 @@ public class FloorReplacerPlugin extends Plugin
 		int level = 0;
 		int floor = 0;
 		float nearest = Float.MAX_VALUE;
+		boolean[] mask = new boolean[n];
 		for (int i = 0; i < n; i++)
 		{
 			if (f1[i] >= vertices || f2[i] >= vertices || f3[i] >= vertices)
@@ -1123,10 +1117,12 @@ public class FloorReplacerPlugin extends Plugin
 			if (isFloorHeight(absolute, levels, wide && average - min <= FACE_SLOPE))
 			{
 				floor++;
+				mask[i] = true;
 			}
 		}
-		sb.append(String.format("faces=%d level=%d floor=%d y=%.0f..%.0f z=%d nearest=%s tex=%b %s",
-			n, level, floor, min, max, objectZ, nearest == Float.MAX_VALUE ? "-" : String.format("%.0f", nearest),
+		sb.append(String.format("faces=%d level=%d floor=%d cover=%.0f%% thick=%b y=%.0f..%.0f z=%d nearest=%s tex=%b %s",
+			n, level, floor, coverage(model, mask, footprint) * 100, max - min > FLAT_OBJECT_HEIGHT, min, max, objectZ,
+			nearest == Float.MAX_VALUE ? "-" : String.format("%.0f", nearest),
 			model.getFaceTextures() != null, originals.containsKey(model) ? "(painted)" : "(not painted)"));
 		return sb.toString();
 	}

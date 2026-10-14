@@ -115,17 +115,6 @@ public interface FloorReplacerConfig extends Config
 		return true;
 	}
 
-	@ConfigItem(
-		keyName = "skipSteep",
-		name = "Skip walls and cliffs",
-		description = "Leave steep terrain alone (cave walls, cliff faces), so only the ground you can walk on is painted.",
-		position = 6
-	)
-	default boolean skipSteep()
-	{
-		return true;
-	}
-
 	@ConfigSection(
 		name = "Areas",
 		description = "Which areas get the painted floor when Where is set to Selected areas only",

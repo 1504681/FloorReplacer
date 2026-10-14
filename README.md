@@ -18,15 +18,15 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Min brightness** and **Max brightness** (20% and 50% by default) clamp the shaded result, so a sunlit plateau can't wash out to near white and a shadowed dungeon can't go near black. They only apply while Keep shading is on. 0% and 100% mean no limit.
 
-**Skip walls and cliffs** (on by default) leaves steep terrain alone: cave walls and cliff faces that are really just very steep ground, such as the room walls in Chambers of Xeric, keep their own look.
-
-**Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted, plus the top surface of wide platforms (2x2 tiles or more) that sit up to a tile above the floor. Objects that spawn during a fight (acid pools, shadow markers, mechanics) are left alone. Off limits the plugin to the terrain itself.
+**Flat floor objects** (on by default) also recolours floors that are really models: thin ones such as mosaics, paving, rugs, trapdoors and puddles are painted whole, and on thicker ones such as arena platforms, docks and bridge decks only the level top faces at walking height are painted, plus the top surface of wide platforms (2x2 tiles or more) that sit up to a tile above the floor, and only when those faces cover a real share of the object's footprint, so a stray level facet on a rock face or wall base is left alone. Objects that spawn during a fight (acid pools, shadow markers, mechanics) are left alone. Off limits the plugin to the terrain itself.
 
 **Never paint object IDs** takes floor object IDs, comma separated, that keep their original colours. Akkha's arena floor in Tombs of Amascut (the quadrant platform, outer rings and hourglass tiles) and the energy pools, herb patches, floor holes and tool spawns (tinderbox, axe, pickaxe, hammer) in Chambers of Xeric are always left alone because you need to see them.
 
 **Show the tile under you** (off by default) shows an overlay, and writes to the client log, what is on each tile you step onto, on every plane of that column, and whether it was painted. Turn it on, stand on the floor that stayed unpainted and screenshot it for a bug report.
 
 ## Changelog
+
+1.2.2: level facets on rock faces and wall bases are no longer painted (the painted faces must cover at least 30% of the object's footprint); the Skip walls and cliffs setting is gone, it skipped real hills and missed the cave walls.
 
 1.2.1: Strength blends like a translucent layer (RGB) instead of through the hue wheel; wall tops no longer count as floor (only wide platforms may match the height of the plane above).
 
