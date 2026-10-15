@@ -52,9 +52,9 @@ import net.runelite.client.ui.overlay.OverlayManager;
 
 @Slf4j
 @PluginDescriptor(
-	name = "Floor Replacer",
+	name = "Floor Painter",
 	description = "Paints every floor tile in the scene a single colour of your choice",
-	tags = {"floor", "ground", "colour", "color", "texture", "recolor", "scene", "terrain", "blindfold", "skybox", "clear", "flat", "visibility"}
+	tags = {"floor", "painter", "paint", "replacer", "ground", "colour", "color", "texture", "recolor", "scene", "terrain", "blindfold", "skybox", "clear", "flat", "visibility"}
 )
 public class FloorReplacerPlugin extends Plugin
 {
@@ -309,7 +309,7 @@ public class FloorReplacerPlugin extends Plugin
 			{
 				debugLines.clear();
 				debugLines.add("v" + VERSION + " debug failed: " + e);
-				log.warn("Floor Replacer: debug failed", e);
+				log.warn("Floor Painter: debug failed", e);
 			}
 		}
 	}
@@ -1171,7 +1171,7 @@ public class FloorReplacerPlugin extends Plugin
 		debugLines.addAll(lines);
 		for (String line : lines)
 		{
-			log.info("Floor Replacer: {}", line);
+			log.info("Floor Painter: {}", line);
 		}
 	}
 
@@ -1368,7 +1368,7 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		catch (RuntimeException e)
 		{
-			log.warn("Floor Replacer: could not invalidate world view {} ({}x{} zones)", scene.getWorldViewId(), zonesX, zonesY, e);
+			log.warn("Floor Painter: could not invalidate world view {} ({}x{} zones)", scene.getWorldViewId(), zonesX, zonesY, e);
 		}
 	}
 }

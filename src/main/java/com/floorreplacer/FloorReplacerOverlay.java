@@ -38,7 +38,7 @@ class FloorReplacerOverlay extends OverlayPanel
 		{
 			return null;
 		}
-		panelComponent.getChildren().add(TitleComponent.builder().text("Floor Replacer debug").build());
+		panelComponent.getChildren().add(TitleComponent.builder().text("Floor Painter debug").build());
 		for (String line : lines)
 		{
 			panelComponent.getChildren().add(LineComponent.builder().left(line).build());
