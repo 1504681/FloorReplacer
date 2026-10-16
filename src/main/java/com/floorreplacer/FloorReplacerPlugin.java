@@ -58,7 +58,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.10";
+	static final String VERSION = "1.2.11";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -1087,49 +1087,22 @@ public class FloorReplacerPlugin extends Plugin
 
 	private void restoreAll()
 	{
+		int failed = 0;
 		for (Map.Entry<Object, int[]> entry : originals.entrySet())
 		{
-			Object key = entry.getKey();
-			int[] orig = entry.getValue();
-			if (key instanceof SceneTilePaint)
+			try
 			{
-				SceneTilePaint paint = (SceneTilePaint) key;
-				paint.setSwColor(orig[0]);
-				paint.setSeColor(orig[1]);
-				paint.setNeColor(orig[2]);
-				paint.setNwColor(orig[3]);
-				paint.setTexture(orig[4]);
+				restore(entry.getKey(), entry.getValue());
 			}
-			else if (key instanceof Model)
+			catch (RuntimeException e)
 			{
-				Model model = (Model) key;
-				int n = model.getFaceCount();
-				System.arraycopy(orig, 0, model.getFaceColors1(), 0, n);
-				System.arraycopy(orig, n, model.getFaceColors2(), 0, n);
-				System.arraycopy(orig, 2 * n, model.getFaceColors3(), 0, n);
-				short[] tex = model.getFaceTextures();
-				if (tex != null && orig.length == 4 * n)
-				{
-					for (int i = 0; i < n; i++)
-					{
-						tex[i] = (short) orig[3 * n + i];
-					}
-				}
+				// one dead model must not keep the rest of the scene painted
+				failed++;
 			}
-			else if (key instanceof SceneTileModel)
-			{
-				SceneTileModel model = (SceneTileModel) key;
-				int[] a = model.getTriangleColorA();
-				int n = a.length;
-				System.arraycopy(orig, 0, a, 0, n);
-				System.arraycopy(orig, n, model.getTriangleColorB(), 0, n);
-				System.arraycopy(orig, 2 * n, model.getTriangleColorC(), 0, n);
-				int[] tex = model.getTriangleTextureId();
-				if (tex != null && orig.length == 4 * n)
-				{
-					System.arraycopy(orig, 3 * n, tex, 0, n);
-				}
-			}
+		}
+		if (failed > 0)
+		{
+			log.warn("Floor Painter: {} of {} pieces could not be restored", failed, originals.size());
 		}
 		originals.clear();
 		animatedModels.clear();
@@ -1140,6 +1113,49 @@ public class FloorReplacerPlugin extends Plugin
 		for (Scene scene : scenes)
 		{
 			invalidate(scene);
+		}
+	}
+
+	private static void restore(Object key, int[] orig)
+	{
+	if (key instanceof SceneTilePaint)
+		{
+			SceneTilePaint paint = (SceneTilePaint) key;
+			paint.setSwColor(orig[0]);
+			paint.setSeColor(orig[1]);
+			paint.setNeColor(orig[2]);
+			paint.setNwColor(orig[3]);
+			paint.setTexture(orig[4]);
+		}
+		else if (key instanceof Model)
+		{
+			Model model = (Model) key;
+			int n = model.getFaceCount();
+			System.arraycopy(orig, 0, model.getFaceColors1(), 0, n);
+			System.arraycopy(orig, n, model.getFaceColors2(), 0, n);
+			System.arraycopy(orig, 2 * n, model.getFaceColors3(), 0, n);
+			short[] tex = model.getFaceTextures();
+			if (tex != null && orig.length == 4 * n)
+			{
+				for (int i = 0; i < n; i++)
+				{
+					tex[i] = (short) orig[3 * n + i];
+				}
+			}
+		}
+		else if (key instanceof SceneTileModel)
+		{
+			SceneTileModel model = (SceneTileModel) key;
+			int[] a = model.getTriangleColorA();
+			int n = a.length;
+			System.arraycopy(orig, 0, a, 0, n);
+			System.arraycopy(orig, n, model.getTriangleColorB(), 0, n);
+			System.arraycopy(orig, 2 * n, model.getTriangleColorC(), 0, n);
+			int[] tex = model.getTriangleTextureId();
+			if (tex != null && orig.length == 4 * n)
+			{
+				System.arraycopy(orig, 3 * n, tex, 0, n);
+			}
 		}
 	}
 

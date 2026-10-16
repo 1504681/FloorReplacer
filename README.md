@@ -26,6 +26,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 ## Changelog
 
+1.2.11: turning the plugin off restores every tile even if one piece or one world view fails on the way.
+
 1.2.10: flat objects on tiles whose own terrain is hidden are the floor there and are painted at any height (Nightmare arena, other platforms over the void); the Nightmare platform pieces join the known-floor list. Fixes the Nightmare arena, bare since 1.2.3.
 
 1.2.9: renamed to Floor Painter (settings carry over); plugin icon.
