@@ -58,7 +58,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.13";
+	static final String VERSION = "1.2.14";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -133,9 +133,10 @@ public class FloorReplacerPlugin extends Plugin
 	// Original colours of every paint/model we touched, so disabling or changing the colour restores them
 	// without a scene reload. Keyed by identity: the client creates fresh objects for each scene build.
 	private final Map<Object, int[]> originals = new IdentityHashMap<>();
-	// An animated object hands out a fresh Model per frame, but the frames share the lit model's face colour
-	// arrays; the first Model seen per colour array stands for the object in originals
-	private final Map<int[], Model> animatedModels = new IdentityHashMap<>();
+	// Painted models, keyed by their first face colour array. A Model is no identity: every animated object's
+	// frames come out of one shared scratch Model whose arrays and face count change with each object asked
+	// for, so a copy keyed by that Model is the wrong length for the next object and the paint pass throws
+	private final Map<int[], Piece> pieces = new IdentityHashMap<>();
 	private final Set<Scene> paintedScenes = Collections.newSetFromMap(new IdentityHashMap<>());
 
 	// Map region the local player stands in (template region inside instances); -1 when unknown
@@ -161,6 +162,7 @@ public class FloorReplacerPlugin extends Plugin
 	private int targetRgb;
 	private double brightness = DEFAULT_BRIGHTNESS;
 	private int[] blendCache;
+	private int failures;
 	private int minLum = 0;
 	private int maxLum = JagexColor.LUMINANCE_MAX;
 
@@ -201,7 +203,7 @@ public class FloorReplacerPlugin extends Plugin
 			case HOPPING:
 				// The scene is about to be rebuilt; the old paints/models are garbage now
 				originals.clear();
-				animatedModels.clear();
+				pieces.clear();
 				paintedScenes.clear();
 				painted = false;
 				currentRegion = -1;
@@ -281,9 +283,16 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		int offset = heightOffset(scene);
 		int[] levels = walkableHeights(tile, scene.getTileHeights(), offset, wide);
-		if (paintFloorObject(renderable, objectZ, levels, wide, footprint, true, hiddenTerrain(tile), paintTarget, paintShade, paintReference) > 0)
+		try
 		{
-			dirty = true;
+			if (paintFloorObject(renderable, objectZ, levels, wide, footprint, true, hiddenTerrain(tile), paintTarget, paintShade, paintReference) > 0)
+			{
+				dirty = true;
+			}
+		}
+		catch (RuntimeException e)
+		{
+			failed(e);
 		}
 	}
 
@@ -550,11 +559,19 @@ public class FloorReplacerPlugin extends Plugin
 					{
 						continue;
 					}
-					count += paintTile(tile, heights, offset, target, shade, reference, objects);
-					Tile bridge = tile.getBridge();
-					if (bridge != null)
+					try
 					{
-						count += paintTile(bridge, heights, offset, target, shade, reference, objects);
+						count += paintTile(tile, heights, offset, target, shade, reference, objects);
+						Tile bridge = tile.getBridge();
+						if (bridge != null)
+						{
+							count += paintTile(bridge, heights, offset, target, shade, reference, objects);
+						}
+					}
+					catch (RuntimeException e)
+					{
+						// one odd model must not leave the whole scene unpainted
+						failed(e);
 					}
 				}
 			}
@@ -564,6 +581,16 @@ public class FloorReplacerPlugin extends Plugin
 		painted = true;
 		invalidate(scene);
 		log.debug("Painted {} floor tiles in world view {}", count, scene.getWorldViewId());
+	}
+
+	/** Count a piece that threw while being painted; the first one per session goes to the log with its trace. */
+	private void failed(RuntimeException e)
+	{
+		failures++;
+		if (failures == 1)
+		{
+			log.warn("Floor Painter: a piece could not be painted", e);
+		}
 	}
 
 	private int paintTile(Tile tile, int[][][] heights, int offset, int target, boolean shade, int reference, boolean objects)
@@ -625,6 +652,18 @@ public class FloorReplacerPlugin extends Plugin
 			return 1;
 		}
 		return Math.max(1, (max.getX() - min.getX() + 1) * (max.getY() - min.getY() + 1));
+	}
+
+	/** Horizontal extent of a face: the longest side of its footprint seen from above. Infinite when unknown. */
+	private static float run(float[] xs, float[] zs, int a, int b, int c)
+	{
+		if (xs == null || zs == null || a >= xs.length || b >= xs.length || c >= xs.length || a >= zs.length || b >= zs.length || c >= zs.length)
+		{
+			return Float.MAX_VALUE;
+		}
+		float dx = Math.max(xs[a], Math.max(xs[b], xs[c])) - Math.min(xs[a], Math.min(xs[b], xs[c]));
+		float dz = Math.max(zs[a], Math.max(zs[b], zs[c])) - Math.min(zs[a], Math.min(zs[b], zs[c]));
+		return Math.max(dx, dz);
 	}
 
 	/** Share of the footprint (in tiles) covered by the given faces, seen from above. Can exceed 1 for overlapping faces. */
@@ -723,14 +762,7 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			return null;
 		}
-		Model frame = renderable.getModel();
-		int[] colors = frame != null ? frame.getFaceColors1() : null;
-		if (colors == null)
-		{
-			return null;
-		}
-		Model first = animatedModels.putIfAbsent(colors, frame);
-		return first != null ? first : frame;
+		return renderable.getModel();
 	}
 
 	/**
@@ -788,7 +820,8 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			return 0;
 		}
-		int n = model.getFaceCount();
+		short[] tex = model.getFaceTextures();
+		int n = faceCount(model, c1, c2, c3, f1, f2, f3, tex);
 		int vertices = Math.min(model.getVerticesCount(), ys.length);
 		if (vertices == 0 || n == 0)
 		{
@@ -821,6 +854,8 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			mask = new boolean[n];
 			boolean any = false;
+			float[] xs = model.getVerticesX();
+			float[] zs = model.getVerticesZ();
 			for (int i = 0; i < n; i++)
 			{
 				if (f1[i] >= vertices || f2[i] >= vertices || f3[i] >= vertices)
@@ -834,7 +869,12 @@ public class FloorReplacerPlugin extends Plugin
 				float hi = Math.max(y1, Math.max(y2, y3));
 				if (hi - lo > FACE_SLOPE)
 				{
-					continue;
+					// A known floor may be bent (the Wardens' warped tiles): any face up to 45 degrees is its
+					// surface; only its sides are skipped. Everything else must be level
+					if (!known || hi - lo > run(xs, zs, f1[i], f2[i], f3[i]))
+					{
+						continue;
+					}
 				}
 				float average = (y1 + y2 + y3) / 3f;
 				boolean top = wide && average - min <= FACE_SLOPE;
@@ -851,40 +891,78 @@ public class FloorReplacerPlugin extends Plugin
 			}
 		}
 
-		if (!originals.containsKey(model))
+		Piece piece = pieces.get(c1);
+		if (piece == null || piece.c2 != c2 || piece.c3 != c3 || piece.tex != tex)
 		{
-			short[] tex = model.getFaceTextures();
-			int[] copy = new int[tex != null ? 4 * n : 3 * n];
-			System.arraycopy(c1, 0, copy, 0, n);
-			System.arraycopy(c2, 0, copy, n, n);
-			System.arraycopy(c3, 0, copy, 2 * n, n);
-			if (tex != null)
-			{
-				for (int i = 0; i < n; i++)
-				{
-					copy[3 * n + i] = tex[i];
-				}
-			}
-			originals.put(model, copy);
+			// the whole arrays, not the first n entries: a shared scratch model's face count is whatever object
+			// it was last asked for, and the copy must fit every later one
+			piece = new Piece(c1, c2, c3, tex);
+			pieces.put(c1, piece);
 		}
-		int[] orig = originals.get(model);
-		short[] tex = model.getFaceTextures();
 		for (int i = 0; i < n; i++)
 		{
 			if (mask != null && !mask[i])
 			{
 				continue;
 			}
-			c1[i] = recolor(orig[i], target, shade, reference);
-			c2[i] = recolor(orig[n + i], target, shade, reference);
+			c1[i] = recolor(piece.origC1[i], target, shade, reference);
+			c2[i] = recolor(piece.origC2[i], target, shade, reference);
 			// colour3 of -1 means flat-shaded face, -2 means hidden face; both must survive
-			c3[i] = recolor(orig[2 * n + i], target, shade, reference);
+			c3[i] = recolor(piece.origC3[i], target, shade, reference);
 			if (tex != null)
 			{
 				tex[i] = -1;
 			}
 		}
 		return 1;
+	}
+
+	/** The colour arrays of one painted model and what they held before. */
+	private static final class Piece
+	{
+		final int[] c1;
+		final int[] c2;
+		final int[] c3;
+		final short[] tex;
+		final int[] origC1;
+		final int[] origC2;
+		final int[] origC3;
+		final short[] origTex;
+
+		Piece(int[] c1, int[] c2, int[] c3, short[] tex)
+		{
+			this.c1 = c1;
+			this.c2 = c2;
+			this.c3 = c3;
+			this.tex = tex;
+			origC1 = c1.clone();
+			origC2 = c2.clone();
+			origC3 = c3.clone();
+			origTex = tex != null ? tex.clone() : null;
+		}
+
+		void restore()
+		{
+			System.arraycopy(origC1, 0, c1, 0, Math.min(origC1.length, c1.length));
+			System.arraycopy(origC2, 0, c2, 0, Math.min(origC2.length, c2.length));
+			System.arraycopy(origC3, 0, c3, 0, Math.min(origC3.length, c3.length));
+			if (tex != null && origTex != null)
+			{
+				System.arraycopy(origTex, 0, tex, 0, Math.min(origTex.length, tex.length));
+			}
+		}
+	}
+
+	/** Faces that every array of the model really has; the reported count is not always honoured by the arrays. */
+	private static int faceCount(Model model, int[] c1, int[] c2, int[] c3, int[] f1, int[] f2, int[] f3, short[] tex)
+	{
+		int n = Math.min(model.getFaceCount(), Math.min(c1.length, Math.min(c2.length, c3.length)));
+		n = Math.min(n, Math.min(f1.length, Math.min(f2.length, f3.length)));
+		if (tex != null)
+		{
+			n = Math.min(n, tex.length);
+		}
+		return Math.max(0, n);
 	}
 
 	private void paintPaint(SceneTilePaint paint, int target, boolean shade, int reference)
@@ -1105,12 +1183,23 @@ public class FloorReplacerPlugin extends Plugin
 				failed++;
 			}
 		}
+		for (Piece piece : pieces.values())
+		{
+			try
+			{
+				piece.restore();
+			}
+			catch (RuntimeException e)
+			{
+				failed++;
+			}
+		}
 		if (failed > 0)
 		{
-			log.warn("Floor Painter: {} of {} pieces could not be restored", failed, originals.size());
+			log.warn("Floor Painter: {} of {} pieces could not be restored", failed, originals.size() + pieces.size());
 		}
 		originals.clear();
-		animatedModels.clear();
+		pieces.clear();
 		painted = false;
 
 		List<Scene> scenes = new ArrayList<>(paintedScenes);
@@ -1131,22 +1220,6 @@ public class FloorReplacerPlugin extends Plugin
 			paint.setNeColor(orig[2]);
 			paint.setNwColor(orig[3]);
 			paint.setTexture(orig[4]);
-		}
-		else if (key instanceof Model)
-		{
-			Model model = (Model) key;
-			int n = model.getFaceCount();
-			System.arraycopy(orig, 0, model.getFaceColors1(), 0, n);
-			System.arraycopy(orig, n, model.getFaceColors2(), 0, n);
-			System.arraycopy(orig, 2 * n, model.getFaceColors3(), 0, n);
-			short[] tex = model.getFaceTextures();
-			if (tex != null && orig.length == 4 * n)
-			{
-				for (int i = 0; i < n; i++)
-				{
-					tex[i] = (short) orig[3 * n + i];
-				}
-			}
 		}
 		else if (key instanceof SceneTileModel)
 		{
@@ -1228,9 +1301,9 @@ public class FloorReplacerPlugin extends Plugin
 		int[][][] heights = scene.getTileHeights();
 		int offset = heightOffset(scene);
 		List<String> lines = new ArrayList<>();
-		lines.add(String.format("v%s %s plane %d scene %d,%d region %d view %s painted=%b (scene %s, %d pieces, %d world entities)", VERSION, where, plane, sx, sy, currentRegion,
+		lines.add(String.format("v%s %s plane %d scene %d,%d region %d view %s painted=%b (scene %s, %d pieces, %d failed, %d world entities)", VERSION, where, plane, sx, sy, currentRegion,
 			view.isTopLevel() ? "top" : "sub " + view.getId() + " " + view.getSizeX() + "x" + view.getSizeY(), painted,
-			paintedScenes.contains(scene) ? "painted" : "not painted", originals.size(), worldEntityCount()));
+			paintedScenes.contains(scene) ? "painted" : "not painted", originals.size() + pieces.size(), failures, worldEntityCount()));
 		if (tiles == null || sx < 0 || sy < 0)
 		{
 			lines.add(tiles == null ? "scene has no tiles" : "tile outside the scene");
@@ -1376,11 +1449,11 @@ public class FloorReplacerPlugin extends Plugin
 		int[] f1 = model.getFaceIndices1();
 		int[] f2 = model.getFaceIndices2();
 		int[] f3 = model.getFaceIndices3();
-		int n = model.getFaceCount();
 		if (ys == null || f1 == null || f2 == null || f3 == null)
 		{
 			return sb.append("model without geometry").toString();
 		}
+		int n = Math.max(0, Math.min(model.getFaceCount(), Math.min(f1.length, Math.min(f2.length, f3.length))));
 		int vertices = Math.min(model.getVerticesCount(), ys.length);
 		float min = Float.MAX_VALUE;
 		float max = -Float.MAX_VALUE;
@@ -1422,7 +1495,7 @@ public class FloorReplacerPlugin extends Plugin
 		sb.append(String.format("faces=%d level=%d floor=%d cover=%.0f%% thick=%b y=%.0f..%.0f z=%d nearest=%s tex=%b %s",
 			n, level, floor, coverage(model, mask, footprint) * 100, max - min > FLAT_OBJECT_HEIGHT, min, max, objectZ,
 			nearest == Float.MAX_VALUE ? "-" : String.format("%.0f", nearest),
-			model.getFaceTextures() != null, originals.containsKey(model) ? "(painted)" : "(not painted)"));
+			model.getFaceTextures() != null, pieces.containsKey(model.getFaceColors1()) ? "(painted)" : "(not painted)"));
 		return sb.toString();
 	}
 

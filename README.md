@@ -26,6 +26,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 ## Changelog
 
+1.2.14: animated floor pieces no longer crash the paint pass (every animated object shares one scratch model, so the saved colours were the wrong length and the Wardens P3 arena stayed unpainted); a piece that still fails is skipped and logged instead of stopping the pass; known floors (Wardens warped tiles, Nightmare platform) are painted on every face up to 45 degrees, not only perfectly level ones.
+
 1.2.13: the tile-under-the-mouse overlay always prints something, naming why when it cannot describe a tile, plus how many pieces are painted and how many world entities are loaded.
 
 1.2.12: Strength keeps working above 40% on dark floors: the brightness limits no longer cap the overlay (Max brightness default 50% to 100%), and they now really apply only with Keep shading on.
