@@ -26,6 +26,10 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 ## Changelog
 
+1.2.10: flat objects on tiles whose own terrain is hidden are the floor there and are painted at any height (Nightmare arena, other platforms over the void); the Nightmare platform pieces join the known-floor list. Fixes the Nightmare arena, bare since 1.2.3.
+
+1.2.9: renamed to Floor Painter (settings carry over); plugin icon.
+
 1.2.8: scenes of sub world views (moving platforms, the Wardens phase 3 arena) are painted and re-uploaded with the right zone count; the debug overlay names the world view and reports its own errors.
 
 1.2.7: the Wardens phase 3 arena floor is painted wherever it floats; its pieces are floor by name and skip the height rules that 1.2.3 added for flat objects.

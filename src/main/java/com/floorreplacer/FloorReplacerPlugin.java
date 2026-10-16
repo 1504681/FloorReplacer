@@ -58,7 +58,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.8";
+	static final String VERSION = "1.2.10";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -97,11 +97,16 @@ public class FloorReplacerPlugin extends Plugin
 	// Objects that are floor by name, so the height rules do not apply (their level faces are painted wherever
 	// they sit) and they are painted even when they SPAWN mid-fight: the Tombs of Amascut Wardens phase 3
 	// arena, which floats over the void (TOA_WARDENS_WARPED_FLOORTILE*, _WARPED_LVL0_01-71,
-	// _WARPED_OUTSIDE_CRUMBLE*, _P3_BROKENTILE*). Everything else that spawns during a fight is a mechanic
+	// _WARPED_OUTSIDE_CRUMBLE*, _P3_BROKENTILE*), and the Nightmare arena platform (NIGHTMARE_PLATFORM_LVL0-3,
+	// 37646-37705). Everything else that spawns during a fight is a mechanic
 	private static final Set<Integer> KNOWN_FLOOR = new HashSet<>();
 	static
 	{
 		for (int id = 45643; id <= 45738; id++)
+		{
+			KNOWN_FLOOR.add(id);
+		}
+		for (int id = 37646; id <= 37705; id++)
 		{
 			KNOWN_FLOOR.add(id);
 		}
@@ -276,7 +281,7 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		int offset = heightOffset(scene);
 		int[] levels = walkableHeights(tile, scene.getTileHeights(), offset, wide);
-		if (paintFloorObject(renderable, objectZ, levels, wide, footprint, true, paintTarget, paintShade, paintReference) > 0)
+		if (paintFloorObject(renderable, objectZ, levels, wide, footprint, true, hiddenTerrain(tile), paintTarget, paintShade, paintReference) > 0)
 		{
 			dirty = true;
 		}
@@ -583,10 +588,11 @@ public class FloorReplacerPlugin extends Plugin
 			// and the ones below (a sunken arena floor seen from the plane above still counts).
 			int[] own = walkableHeights(tile, heights, offset, false);
 			int[] all = walkableHeights(tile, heights, offset, true);
+			boolean bare = hiddenTerrain(tile);
 			GroundObject ground = tile.getGroundObject();
 			if (ground != null && !excluded(ground.getId()))
 			{
-				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), own, false, 1, KNOWN_FLOOR.contains(ground.getId()), target, shade, reference);
+				painted += paintFloorObject(ground.getRenderable(), ground.getZ(), own, false, 1, KNOWN_FLOOR.contains(ground.getId()), bare, target, shade, reference);
 			}
 			GameObject[] gameObjects = tile.getGameObjects();
 			if (gameObjects != null)
@@ -596,7 +602,7 @@ public class FloorReplacerPlugin extends Plugin
 					if (gameObject != null && !excluded(gameObject.getId()))
 					{
 						boolean wide = isWide(gameObject);
-						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), wide ? all : own, wide, footprint(gameObject), KNOWN_FLOOR.contains(gameObject.getId()), target, shade, reference);
+						painted += paintFloorObject(gameObject.getRenderable(), gameObject.getZ(), wide ? all : own, wide, footprint(gameObject), KNOWN_FLOOR.contains(gameObject.getId()), bare, target, shade, reference);
 					}
 				}
 			}
@@ -733,7 +739,38 @@ public class FloorReplacerPlugin extends Plugin
 	 * and only those sitting at a plane's tile height: the surface you walk on, not the sides or the underside.
 	 * Animated objects and actors are left alone.
 	 */
-	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, boolean wide, int footprint, boolean known, int target, boolean shade, int reference)
+	/**
+	 * True when the tile has no visible terrain of its own: no paint or model, or one hidden with the 12345678
+	 * colour. Jagex hides the terrain where an object is the floor (boss arenas, platforms over the void), so
+	 * a flat object on such a tile is the floor whatever height it floats at.
+	 */
+	private static boolean hiddenTerrain(Tile tile)
+	{
+		SceneTilePaint paint = tile.getSceneTilePaint();
+		if (paint != null)
+		{
+			return paint.getNeColor() == HIDDEN;
+		}
+		SceneTileModel model = tile.getSceneTileModel();
+		if (model != null)
+		{
+			int[] colors = model.getTriangleColorA();
+			if (colors == null)
+			{
+				return true;
+			}
+			for (int color : colors)
+			{
+				if (color != HIDDEN)
+				{
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	private int paintFloorObject(Renderable renderable, int objectZ, int[] levels, boolean wide, int footprint, boolean known, boolean bare, int target, boolean shade, int reference)
 	{
 		Model model = modelOf(renderable);
 		if (model == null)
@@ -765,7 +802,7 @@ public class FloorReplacerPlugin extends Plugin
 			max = Math.max(max, ys[i]);
 		}
 
-		if (levels.length == 0 && !known)
+		if (levels.length == 0 && !known && !bare)
 		{
 			return 0;
 		}
@@ -773,8 +810,9 @@ public class FloorReplacerPlugin extends Plugin
 		if (max - min <= FLAT_OBJECT_HEIGHT)
 		{
 			// A flat model is only floor when it rests on one. Cave wall caps, roof slabs and ledges are flat
-			// too, but they hang a storey above the tile height. A known floor may float wherever it likes
-			if (!known && !isFloorHeight(objectZ + max, levels, false))
+			// too, but they hang a storey above the tile height. A known floor, or a flat object on a tile
+			// whose own terrain is hidden (the object IS the floor there), may float wherever it likes
+			if (!known && !bare && !isFloorHeight(objectZ + max, levels, false))
 			{
 				return 0;
 			}
