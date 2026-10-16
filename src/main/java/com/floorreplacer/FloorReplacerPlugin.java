@@ -58,7 +58,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.12";
+	static final String VERSION = "1.2.13";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -1171,6 +1171,24 @@ public class FloorReplacerPlugin extends Plugin
 	 * terrain, every object and why each was or was not painted. The floor you see is often a lower plane than
 	 * the one you stand on.
 	 */
+	private int worldEntityCount()
+	{
+		WorldView top = client.getTopLevelWorldView();
+		if (top == null)
+		{
+			return 0;
+		}
+		int n = 0;
+		for (WorldEntity entity : top.worldEntities())
+		{
+			if (entity != null)
+			{
+				n++;
+			}
+		}
+		return n;
+	}
+
 	private void debugTile()
 	{
 		Player local = client.getLocalPlayer();
@@ -1179,6 +1197,11 @@ public class FloorReplacerPlugin extends Plugin
 		Scene scene = view != null ? view.getScene() : null;
 		if (scene == null || lp == null)
 		{
+			// never leave the overlay blank: say why there is nothing to describe
+			debugLines.clear();
+			debugLines.add(String.format("v%s no %s (player %s, view %s)", VERSION, scene == null ? "scene" : "player position",
+				local == null ? "null" : "present", view == null ? "null" : (view.isTopLevel() ? "top" : "sub " + view.getId())));
+			lastDebugTile = -1;
 			return;
 		}
 		int plane = view.getPlane();
@@ -1202,17 +1225,21 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		lastDebugTile = key;
 		Tile[][][] tiles = scene.getTiles();
-		if (tiles == null || sx < 0 || sy < 0)
-		{
-			return;
-		}
 		int[][][] heights = scene.getTileHeights();
 		int offset = heightOffset(scene);
 		List<String> lines = new ArrayList<>();
-		lines.add(String.format("v%s %s plane %d scene %d,%d region %d view %s painted=%b (scene %s)", VERSION, where, plane, sx, sy, currentRegion,
+		lines.add(String.format("v%s %s plane %d scene %d,%d region %d view %s painted=%b (scene %s, %d pieces, %d world entities)", VERSION, where, plane, sx, sy, currentRegion,
 			view.isTopLevel() ? "top" : "sub " + view.getId() + " " + view.getSizeX() + "x" + view.getSizeY(), painted,
-			paintedScenes.contains(scene) ? "painted" : "not painted"));
+			paintedScenes.contains(scene) ? "painted" : "not painted", originals.size(), worldEntityCount()));
+		if (tiles == null || sx < 0 || sy < 0)
+		{
+			lines.add(tiles == null ? "scene has no tiles" : "tile outside the scene");
+			debugLines.clear();
+			debugLines.addAll(lines);
+			return;
+		}
 		CollisionData[] collision = view.getCollisionMaps();
+		int described = 0;
 		for (int z = 0; z < tiles.length; z++)
 		{
 			if (sx >= tiles[z].length || sy >= tiles[z][sx].length || tiles[z][sx][sy] == null)
@@ -1220,11 +1247,16 @@ public class FloorReplacerPlugin extends Plugin
 				continue;
 			}
 			Tile tile = tiles[z][sx][sy];
+			described++;
 			describeTile(tile, "plane " + z + walkability(collision, z, sx, sy), heights, offset, lines);
 			if (tile.getBridge() != null)
 			{
 				describeTile(tile.getBridge(), "plane " + z + " bridge", heights, offset, lines);
 			}
+		}
+		if (described == 0)
+		{
+			lines.add("no tile on any plane here");
 		}
 		debugLines.clear();
 		debugLines.addAll(lines);

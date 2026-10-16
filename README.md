@@ -26,6 +26,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 ## Changelog
 
+1.2.13: the tile-under-the-mouse overlay always prints something, naming why when it cannot describe a tile, plus how many pieces are painted and how many world entities are loaded.
+
 1.2.12: Strength keeps working above 40% on dark floors: the brightness limits no longer cap the overlay (Max brightness default 50% to 100%), and they now really apply only with Keep shading on.
 
 1.2.11: turning the plugin off restores every tile even if one piece or one world view fails on the way.
