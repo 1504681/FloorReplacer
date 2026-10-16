@@ -83,7 +83,7 @@ public interface FloorReplacerConfig extends Config
 	@ConfigItem(
 		keyName = "minBrightness",
 		name = "Min brightness",
-		description = "With Keep shading on, no tile is drawn darker than this.",
+		description = "With Keep shading on, no tile is drawn darker than this. Raise it to make the paint show on very dark floors such as boss arenas.",
 		position = 3
 	)
 	default int minBrightness()
@@ -96,12 +96,12 @@ public interface FloorReplacerConfig extends Config
 	@ConfigItem(
 		keyName = "maxBrightness",
 		name = "Max brightness",
-		description = "With Keep shading on, no tile is drawn brighter than this.",
+		description = "With Keep shading on, no tile is drawn brighter than this. 100% is no limit.",
 		position = 4
 	)
 	default int maxBrightness()
 	{
-		return 50;
+		return 100;
 	}
 
 	@ConfigItem(

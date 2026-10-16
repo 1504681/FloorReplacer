@@ -13,3 +13,4 @@
 - ToA Wardens P3 (1.2.8): the debug header says 'view sub N' if the arena is its own world view; its floor is painted; the overlay never goes blank there.
 - Nightmare: the arena platform is painted again (hidden terrain + NIGHTMARE_PLATFORM 37646-37705 known floor), bare on hub 1.2.4 (1.2.9).
 - Turning the plugin off (or Where = Selected areas and walking out) restores every tile, including with a boat or other world entity in the scene (1.2.11).
+- Wardens P3 (dark floor): Strength 20% to 80% with white visibly brightens the floor mid-fight; Keep shading off makes Min/Max brightness do nothing (1.2.12).

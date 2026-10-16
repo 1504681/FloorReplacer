@@ -58,7 +58,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.11";
+	static final String VERSION = "1.2.12";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -952,14 +952,14 @@ public class FloorReplacerPlugin extends Plugin
 		}
 		if (strength < 100)
 		{
-			return overlay(original);
+			return overlay(original, shade);
 		}
 		int lum = JagexColor.unpackLuminance((short) target);
 		if (shade)
 		{
 			lum += JagexColor.unpackLuminance((short) original) - reference;
+			lum = Math.max(minLum, Math.min(maxLum, lum));
 		}
-		lum = Math.max(minLum, Math.min(maxLum, lum));
 		return JagexColor.packHSL(
 			JagexColor.unpackHue((short) target),
 			JagexColor.unpackSaturation((short) target),
@@ -970,7 +970,7 @@ public class FloorReplacerPlugin extends Plugin
 	 * Partial strength: the chosen colour laid over the original like a translucent layer. Blended in RGB, so a
 	 * brown floor heading for blue goes through grey-blue, never through green or purple.
 	 */
-	private int overlay(int original)
+	private int overlay(int original, boolean shade)
 	{
 		int key = original & 0xFFFF;
 		int cached = blendCache[key];
@@ -983,8 +983,13 @@ public class FloorReplacerPlugin extends Plugin
 		int g = mix(rgb >> 8 & 0xFF, targetRgb >> 8 & 0xFF);
 		int b = mix(rgb & 0xFF, targetRgb & 0xFF);
 		int packed = JagexColor.rgbToHSL(r << 16 | g << 8 | b, brightness) & 0xFFFF;
-		int lum = Math.max(minLum, Math.min(maxLum, JagexColor.unpackLuminance((short) packed)));
-		packed = JagexColor.packHSL(JagexColor.unpackHue((short) packed), JagexColor.unpackSaturation((short) packed), lum) & 0xFFFF;
+		if (shade)
+		{
+			// the brightness limits belong to Keep shading, as the settings promise; without them a white
+			// overlay on a dark arena floor would stop brightening at Max brightness however high Strength goes
+			int lum = Math.max(minLum, Math.min(maxLum, JagexColor.unpackLuminance((short) packed)));
+			packed = JagexColor.packHSL(JagexColor.unpackHue((short) packed), JagexColor.unpackSaturation((short) packed), lum) & 0xFFFF;
+		}
 		blendCache[key] = packed;
 		return packed;
 	}
