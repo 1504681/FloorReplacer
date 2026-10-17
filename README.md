@@ -6,6 +6,15 @@ A clean, uniform floor makes ground markers, true tile, projectiles and ground i
 
 It rewrites the vertex colours of the scene's tiles the moment a region finishes loading, so it works with the GPU plugin on or off and costs nothing per frame. Turning the plugin off or picking another colour puts the original colours straight back, no scene reload needed.
 
+## Before and after
+
+Nightmare arena, plugin off on the left and on the right.
+
+| Off | On |
+|---|---|
+| ![Nightmare from above, plugin off](docs/nightmare-overhead-off.png) | ![Nightmare from above, plugin on](docs/nightmare-overhead-on.png) |
+| ![Nightmare at ground level, plugin off](docs/nightmare-ground-off.png) | ![Nightmare at ground level, plugin on](docs/nightmare-ground-on.png) |
+
 ## Settings
 
 **Where** is Everywhere by default. Set it to Selected areas only and the floor is painted just in the areas ticked under Areas: each Theatre of Blood room, each Tombs of Amascut boss (with its puzzle room), Chambers of Xeric, Inferno, Fight Cave, Fortis Colosseum, Doom of Mokhaiotl, Nex, Nightmare and Yama, all on by default. **Custom region IDs** takes extra map regions, comma separated, for anywhere else. The floor switches back to normal the moment you leave a selected area.
