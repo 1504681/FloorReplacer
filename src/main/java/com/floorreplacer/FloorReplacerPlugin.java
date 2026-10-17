@@ -59,7 +59,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.3.0";
+	static final String VERSION = "1.3.1";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -94,7 +94,8 @@ public class FloorReplacerPlugin extends Plugin
 	private static final Set<Integer> NEVER_PAINT = new HashSet<>(Arrays.asList(
 		30066, 30067, 32542, 29734, 31634, 31862, 41754, 29711,
 		29765, 29877, 29997, 29998, 29999, 30000, 30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009, 30010, 30011,
-		29781, 29782, 29783, 29784, 29785, 29786, 29787, 29788));
+		29781, 29782, 29783, 29784, 29785, 29786, 29787, 29788,
+		56246)); // YAMA_STEPPINGSTONE: the stones across the Judge of Yama's lava must not look like the lava
 	// Objects that are floor by name, so the height rules do not apply (their level faces are painted wherever
 	// they sit) and they are painted even when they SPAWN mid-fight: the Tombs of Amascut Wardens phase 3
 	// arena, which floats over the void (TOA_WARDENS_WARPED_FLOORTILE*, _WARPED_LVL0_01-71,
@@ -500,8 +501,7 @@ public class FloorReplacerPlugin extends Plugin
 				return "nex";
 			case 15515:
 				return "nightmare";
-			case 5789:
-			case 6045:
+			case 6045: // Yama's Domain, the arena; 5789 is the cave outside it
 				return "yama";
 			default:
 				return region != -1 && customRegions().contains(region) ? CUSTOM_AREA : null;

@@ -16,3 +16,4 @@
 - Wardens P3: warped ground objects 45646-45648 painted (1.2.14).
 - Per-area colour and strength on, Wardens set to red 60%, Nightmare unset: Wardens red, Nightmare main white 20%, walking out of Wardens into the lobby goes back to white; turning the toggle off goes back to white everywhere (1.3.0).
 - Wardens P3 (dark floor): Strength 20% to 80% with white visibly brightens the floor mid-fight; Keep shading off makes Min/Max brightness do nothing (1.2.12).
+- Yama: the cave outside the arena (region 5789) is not painted with Where = Selected areas; in the arena the lava is painted and the Judge-phase stepping stones (56246) are not (1.3.1).

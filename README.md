@@ -37,6 +37,8 @@ Nightmare arena, plugin off on the left and on the right.
 
 ## Changelog
 
+1.3.1: Yama is only the arena (region 6045), not the cave outside it; the stepping stones across the Judge of Yama's lava keep their own look while the lava is painted.
+
 1.3.0: Per-area colour and strength: each area (and the custom regions) can have its own Floor colour and Strength, falling back to the main ones when unset; the floor is repainted on entering an area whose settings differ.
 
 1.2.14: animated floor pieces no longer crash the paint pass (every animated object shares one scratch model, so the saved colours were the wrong length and the Wardens P3 arena stayed unpainted); a piece that still fails is skipped and logged instead of stopping the pass; known floors (Wardens warped tiles, Nightmare platform) are painted on every face up to 45 degrees, not only perfectly level ones.
