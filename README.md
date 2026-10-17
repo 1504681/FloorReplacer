@@ -10,6 +10,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 
 **Where** is Everywhere by default. Set it to Selected areas only and the floor is painted just in the areas ticked under Areas: each Theatre of Blood room, each Tombs of Amascut boss (with its puzzle room), Chambers of Xeric, Inferno, Fight Cave, Fortis Colosseum, Doom of Mokhaiotl, Nex, Nightmare and Yama, all on by default. **Custom region IDs** takes extra map regions, comma separated, for anywhere else. The floor switches back to normal the moment you leave a selected area.
 
+**Per-area colour and strength** gives each area its own Floor colour and Strength, set under the section of the same name: one colour and one strength per area plus one pair for Custom region IDs. An area left on "Pick a color" or -1 keeps the main settings. The floor is repainted the moment you walk into an area with its own settings, in Everywhere mode too.
+
 **Floor colour** is the colour every tile gets. Default is white (#FFFFFF).
 
 **Strength** (20% by default) is how much of that colour goes on. At 100% the floor is replaced outright. Lower values lay the colour over the floor like a translucent layer, so the ground keeps its own look underneath, softened and tinted.
@@ -25,6 +27,8 @@ It rewrites the vertex colours of the scene's tiles the moment a region finishes
 **Show the tile under the mouse** (off by default) shows an overlay, and writes to the client log, what is on the tile under the mouse (or under you when the mouse is off the scene), on every plane of that column, whether it is walkable and whether it was painted. Turn it on, hover the floor or wall that looks wrong and screenshot it for a bug report.
 
 ## Changelog
+
+1.3.0: Per-area colour and strength: each area (and the custom regions) can have its own Floor colour and Strength, falling back to the main ones when unset; the floor is repainted on entering an area whose settings differ.
 
 1.2.14: animated floor pieces no longer crash the paint pass (every animated object shares one scratch model, so the saved colours were the wrong length and the Wardens P3 arena stayed unpainted); a piece that still fails is skipped and logged instead of stopping the pass; known floors (Wardens warped tiles, Nightmare platform) are painted on every face up to 45 degrees, not only perfectly level ones.
 

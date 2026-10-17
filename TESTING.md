@@ -14,4 +14,5 @@
 - Nightmare: the arena platform is painted again (hidden terrain + NIGHTMARE_PLATFORM 37646-37705 known floor), bare on hub 1.2.4 (1.2.9).
 - Turning the plugin off (or Where = Selected areas and walking out) restores every tile, including with a boat or other world entity in the scene (1.2.11).
 - Wardens P3: warped ground objects 45646-45648 painted (1.2.14).
+- Per-area colour and strength on, Wardens set to red 60%, Nightmare unset: Wardens red, Nightmare main white 20%, walking out of Wardens into the lobby goes back to white; turning the toggle off goes back to white everywhere (1.3.0).
 - Wardens P3 (dark floor): Strength 20% to 80% with white visibly brightens the floor mid-fight; Keep shading off makes Min/Max brightness do nothing (1.2.12).

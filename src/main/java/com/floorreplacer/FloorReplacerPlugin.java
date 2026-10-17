@@ -1,6 +1,7 @@
 package com.floorreplacer;
 
 import com.google.inject.Provides;
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -58,7 +59,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class FloorReplacerPlugin extends Plugin
 {
-	static final String VERSION = "1.2.14";
+	static final String VERSION = "1.3.0";
 
 	// Vertex colour the client uses for tiles that must not be drawn (under bridges etc.)
 	private static final int HIDDEN = 12345678;
@@ -113,6 +114,7 @@ public class FloorReplacerPlugin extends Plugin
 	}
 	// Scene.getTileHeights() is indexed in extended scene coordinates for the top-level world view, while
 	// Tile.getSceneLocation() is in plain scene coordinates (same convention as the GPU plugin's uploader)
+	private static final String CUSTOM_AREA = "custom";
 	private static final int SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2;
 
 	@Inject
@@ -123,6 +125,9 @@ public class FloorReplacerPlugin extends Plugin
 
 	@Inject
 	private FloorReplacerConfig config;
+
+	@Inject
+	private ConfigManager configManager;
 
 	@Inject
 	private OverlayManager overlayManager;
@@ -163,6 +168,8 @@ public class FloorReplacerPlugin extends Plugin
 	private double brightness = DEFAULT_BRIGHTNESS;
 	private int[] blendCache;
 	private int failures;
+	// colour (RGB) and strength the scenes were last painted with; a change of area may change both
+	private int[] paintedStyle;
 	private int minLum = 0;
 	private int maxLum = JagexColor.LUMINANCE_MAX;
 
@@ -371,6 +378,12 @@ public class FloorReplacerPlugin extends Plugin
 		{
 			restoreAll();
 		}
+		else if (want && paintedStyle != null && !Arrays.equals(paintedStyle, currentStyle()))
+		{
+			// walked into an area with its own colour or strength
+			restoreAll();
+			paintAll();
+		}
 	}
 
 	private boolean wanted()
@@ -382,39 +395,82 @@ public class FloorReplacerPlugin extends Plugin
 		return currentRegion != -1 && regionEnabled(currentRegion);
 	}
 
-	// Region IDs cross-checked against the Watchdog, Blert and Automatic Low Detail plugins
 	private boolean regionEnabled(int region)
+	{
+		String key = areaKey(region);
+		if (key == null)
+		{
+			return false;
+		}
+		if (key.equals(CUSTOM_AREA))
+		{
+			return true;
+		}
+		Boolean on = configManager.getConfiguration(FloorReplacerConfig.GROUP, key, Boolean.class);
+		return on == null || on;
+	}
+
+	/**
+	 * The colour (RGB) and strength to paint with where the player stands: the main settings, or the area's own
+	 * when Per-area colour and strength is on and the area has them set.
+	 */
+	private int[] currentStyle()
+	{
+		int rgb = config.color().getRGB() & 0xFFFFFF;
+		int strength = config.strength();
+		String key = config.perArea() ? areaKey(currentRegion) : null;
+		if (key != null)
+		{
+			Color color = configManager.getConfiguration(FloorReplacerConfig.GROUP, key + "Color", Color.class);
+			if (color != null)
+			{
+				rgb = color.getRGB() & 0xFFFFFF;
+			}
+			Integer own = configManager.getConfiguration(FloorReplacerConfig.GROUP, key + "Strength", Integer.class);
+			if (own != null && own >= 0)
+			{
+				strength = own;
+			}
+		}
+		return new int[]{rgb, Math.max(0, Math.min(100, strength))};
+	}
+
+	/**
+	 * The config key of the area this region belongs to (its toggle; + "Color"/"Strength" for its own style), or
+	 * null. Region IDs cross-checked against the Watchdog, Blert and Automatic Low Detail plugins.
+	 */
+	private String areaKey(int region)
 	{
 		switch (region)
 		{
 			case 12613:
-				return config.tobMaiden();
+				return "tobMaiden";
 			case 13125:
-				return config.tobBloat();
+				return "tobBloat";
 			case 13122:
-				return config.tobNylocas();
+				return "tobNylocas";
 			case 13123:
 			case 13379:
-				return config.tobSotetseg();
+				return "tobSotetseg";
 			case 12612:
-				return config.tobXarpus();
+				return "tobXarpus";
 			case 12611:
-				return config.tobVerzik();
+				return "tobVerzik";
 			case 15698:
 			case 15700:
-				return config.toaZebak();
+				return "toaZebak";
 			case 14162:
 			case 14164:
-				return config.toaKephri();
+				return "toaKephri";
 			case 14674:
 			case 14676:
-				return config.toaAkkha();
+				return "toaAkkha";
 			case 15186:
 			case 15188:
-				return config.toaBaba();
+				return "toaBaba";
 			case 15184:
 			case 15696:
-				return config.toaWardens();
+				return "toaWardens";
 			case 13136:
 			case 13137:
 			case 13393:
@@ -429,26 +485,26 @@ public class FloorReplacerPlugin extends Plugin
 			case 13145:
 			case 13401:
 			case 12889:
-				return config.cox();
+				return "cox";
 			case 9043:
-				return config.inferno();
+				return "inferno";
 			case 9551:
-				return config.fightCave();
+				return "fightCave";
 			case 7216:
-				return config.colosseum();
+				return "colosseum";
 			case 5269:
 			case 13668:
 			case 14180:
-				return config.doom();
+				return "doom";
 			case 11601:
-				return config.nex();
+				return "nex";
 			case 15515:
-				return config.nightmare();
+				return "nightmare";
 			case 5789:
 			case 6045:
-				return config.yama();
+				return "yama";
 			default:
-				return customRegions().contains(region);
+				return region != -1 && customRegions().contains(region) ? CUSTOM_AREA : null;
 		}
 	}
 
@@ -521,11 +577,13 @@ public class FloorReplacerPlugin extends Plugin
 
 		TextureProvider textures = client.getTextureProvider();
 		brightness = textures != null ? textures.getBrightness() : DEFAULT_BRIGHTNESS;
-		targetRgb = config.color().getRGB() & 0xFFFFFF;
+		int[] style = currentStyle();
+		paintedStyle = style;
+		targetRgb = style[0];
 		int target = JagexColor.rgbToHSL(targetRgb, brightness) & 0xFFFF;
 		boolean shade = config.keepShading();
 		boolean objects = config.floorObjects();
-		strength = Math.max(0, Math.min(100, config.strength()));
+		strength = style[1];
 		if (strength < 100)
 		{
 			if (blendCache == null)
@@ -1201,6 +1259,7 @@ public class FloorReplacerPlugin extends Plugin
 		originals.clear();
 		pieces.clear();
 		painted = false;
+		paintedStyle = null;
 
 		List<Scene> scenes = new ArrayList<>(paintedScenes);
 		paintedScenes.clear();

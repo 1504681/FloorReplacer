@@ -115,6 +115,17 @@ public interface FloorReplacerConfig extends Config
 		return true;
 	}
 
+	@ConfigItem(
+		keyName = "perArea",
+		name = "Per-area colour and strength",
+		description = "Give each area its own Floor colour and Strength, set under Per-area colour and strength below. Areas left on 'Pick a color' and -1 keep the main settings.",
+		position = 6
+	)
+	default boolean perArea()
+	{
+		return false;
+	}
+
 	@ConfigSection(
 		name = "Areas",
 		description = "Which areas get the painted floor when Where is set to Selected areas only",
@@ -247,6 +258,294 @@ public interface FloorReplacerConfig extends Config
 	default String customRegions()
 	{
 		return "";
+	}
+
+	@ConfigSection(
+		name = "Per-area colour and strength",
+		description = "Only used while Per-area colour and strength is on. Unset colours and -1 strengths fall back to the main settings",
+		position = 11,
+		closedByDefault = true
+	)
+	String perAreaSettings = "perAreaSettings";
+
+	@ConfigItem(keyName = "tobMaidenColor", name = "ToB: Maiden colour", description = "Floor colour in ToB: Maiden; leave unset for the main Floor colour", section = perAreaSettings, position = 0)
+	default Color tobMaidenColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "tobMaidenStrength", name = "ToB: Maiden strength", description = "Strength in ToB: Maiden; -1 uses the main Strength", section = perAreaSettings, position = 1)
+	default int tobMaidenStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "tobBloatColor", name = "ToB: Bloat colour", description = "Floor colour in ToB: Bloat; leave unset for the main Floor colour", section = perAreaSettings, position = 2)
+	default Color tobBloatColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "tobBloatStrength", name = "ToB: Bloat strength", description = "Strength in ToB: Bloat; -1 uses the main Strength", section = perAreaSettings, position = 3)
+	default int tobBloatStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "tobNylocasColor", name = "ToB: Nylocas colour", description = "Floor colour in ToB: Nylocas; leave unset for the main Floor colour", section = perAreaSettings, position = 4)
+	default Color tobNylocasColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "tobNylocasStrength", name = "ToB: Nylocas strength", description = "Strength in ToB: Nylocas; -1 uses the main Strength", section = perAreaSettings, position = 5)
+	default int tobNylocasStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "tobSotetsegColor", name = "ToB: Sotetseg colour", description = "Floor colour in ToB: Sotetseg; leave unset for the main Floor colour", section = perAreaSettings, position = 6)
+	default Color tobSotetsegColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "tobSotetsegStrength", name = "ToB: Sotetseg strength", description = "Strength in ToB: Sotetseg; -1 uses the main Strength", section = perAreaSettings, position = 7)
+	default int tobSotetsegStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "tobXarpusColor", name = "ToB: Xarpus colour", description = "Floor colour in ToB: Xarpus; leave unset for the main Floor colour", section = perAreaSettings, position = 8)
+	default Color tobXarpusColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "tobXarpusStrength", name = "ToB: Xarpus strength", description = "Strength in ToB: Xarpus; -1 uses the main Strength", section = perAreaSettings, position = 9)
+	default int tobXarpusStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "tobVerzikColor", name = "ToB: Verzik colour", description = "Floor colour in ToB: Verzik; leave unset for the main Floor colour", section = perAreaSettings, position = 10)
+	default Color tobVerzikColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "tobVerzikStrength", name = "ToB: Verzik strength", description = "Strength in ToB: Verzik; -1 uses the main Strength", section = perAreaSettings, position = 11)
+	default int tobVerzikStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "toaZebakColor", name = "ToA: Crondis + Zebak colour", description = "Floor colour in ToA: Crondis + Zebak; leave unset for the main Floor colour", section = perAreaSettings, position = 12)
+	default Color toaZebakColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "toaZebakStrength", name = "ToA: Crondis + Zebak strength", description = "Strength in ToA: Crondis + Zebak; -1 uses the main Strength", section = perAreaSettings, position = 13)
+	default int toaZebakStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "toaKephriColor", name = "ToA: Scabaras + Kephri colour", description = "Floor colour in ToA: Scabaras + Kephri; leave unset for the main Floor colour", section = perAreaSettings, position = 14)
+	default Color toaKephriColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "toaKephriStrength", name = "ToA: Scabaras + Kephri strength", description = "Strength in ToA: Scabaras + Kephri; -1 uses the main Strength", section = perAreaSettings, position = 15)
+	default int toaKephriStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "toaAkkhaColor", name = "ToA: Het + Akkha colour", description = "Floor colour in ToA: Het + Akkha; leave unset for the main Floor colour", section = perAreaSettings, position = 16)
+	default Color toaAkkhaColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "toaAkkhaStrength", name = "ToA: Het + Akkha strength", description = "Strength in ToA: Het + Akkha; -1 uses the main Strength", section = perAreaSettings, position = 17)
+	default int toaAkkhaStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "toaBabaColor", name = "ToA: Apmeken + Ba-Ba colour", description = "Floor colour in ToA: Apmeken + Ba-Ba; leave unset for the main Floor colour", section = perAreaSettings, position = 18)
+	default Color toaBabaColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "toaBabaStrength", name = "ToA: Apmeken + Ba-Ba strength", description = "Strength in ToA: Apmeken + Ba-Ba; -1 uses the main Strength", section = perAreaSettings, position = 19)
+	default int toaBabaStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "toaWardensColor", name = "ToA: Wardens colour", description = "Floor colour in ToA: Wardens; leave unset for the main Floor colour", section = perAreaSettings, position = 20)
+	default Color toaWardensColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "toaWardensStrength", name = "ToA: Wardens strength", description = "Strength in ToA: Wardens; -1 uses the main Strength", section = perAreaSettings, position = 21)
+	default int toaWardensStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "coxColor", name = "Chambers of Xeric colour", description = "Floor colour in Chambers of Xeric; leave unset for the main Floor colour", section = perAreaSettings, position = 22)
+	default Color coxColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "coxStrength", name = "Chambers of Xeric strength", description = "Strength in Chambers of Xeric; -1 uses the main Strength", section = perAreaSettings, position = 23)
+	default int coxStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "infernoColor", name = "Inferno colour", description = "Floor colour in Inferno; leave unset for the main Floor colour", section = perAreaSettings, position = 24)
+	default Color infernoColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "infernoStrength", name = "Inferno strength", description = "Strength in Inferno; -1 uses the main Strength", section = perAreaSettings, position = 25)
+	default int infernoStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "fightCaveColor", name = "Fight Cave colour", description = "Floor colour in Fight Cave; leave unset for the main Floor colour", section = perAreaSettings, position = 26)
+	default Color fightCaveColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "fightCaveStrength", name = "Fight Cave strength", description = "Strength in Fight Cave; -1 uses the main Strength", section = perAreaSettings, position = 27)
+	default int fightCaveStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "colosseumColor", name = "Fortis Colosseum colour", description = "Floor colour in Fortis Colosseum; leave unset for the main Floor colour", section = perAreaSettings, position = 28)
+	default Color colosseumColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "colosseumStrength", name = "Fortis Colosseum strength", description = "Strength in Fortis Colosseum; -1 uses the main Strength", section = perAreaSettings, position = 29)
+	default int colosseumStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "doomColor", name = "Doom of Mokhaiotl colour", description = "Floor colour in Doom of Mokhaiotl; leave unset for the main Floor colour", section = perAreaSettings, position = 30)
+	default Color doomColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "doomStrength", name = "Doom of Mokhaiotl strength", description = "Strength in Doom of Mokhaiotl; -1 uses the main Strength", section = perAreaSettings, position = 31)
+	default int doomStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "nexColor", name = "Nex colour", description = "Floor colour in Nex; leave unset for the main Floor colour", section = perAreaSettings, position = 32)
+	default Color nexColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "nexStrength", name = "Nex strength", description = "Strength in Nex; -1 uses the main Strength", section = perAreaSettings, position = 33)
+	default int nexStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "nightmareColor", name = "Nightmare colour", description = "Floor colour in Nightmare; leave unset for the main Floor colour", section = perAreaSettings, position = 34)
+	default Color nightmareColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "nightmareStrength", name = "Nightmare strength", description = "Strength in Nightmare; -1 uses the main Strength", section = perAreaSettings, position = 35)
+	default int nightmareStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "yamaColor", name = "Yama colour", description = "Floor colour in Yama; leave unset for the main Floor colour", section = perAreaSettings, position = 36)
+	default Color yamaColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "yamaStrength", name = "Yama strength", description = "Strength in Yama; -1 uses the main Strength", section = perAreaSettings, position = 37)
+	default int yamaStrength()
+	{
+		return -1;
+	}
+
+	@ConfigItem(keyName = "customColor", name = "Custom regions colour", description = "Floor colour in Custom regions; leave unset for the main Floor colour", section = perAreaSettings, position = 38)
+	default Color customColor()
+	{
+		return null;
+	}
+
+	@Range(min = -1, max = 100)
+	@Units(Units.PERCENT)
+	@ConfigItem(keyName = "customStrength", name = "Custom regions strength", description = "Strength in Custom regions; -1 uses the main Strength", section = perAreaSettings, position = 39)
+	default int customStrength()
+	{
+		return -1;
 	}
 
 	@ConfigItem(
